@@ -520,6 +520,7 @@
 	export_deprecated_constant3("mf_nomineeffect", MF_FORCEMINEFFECT, "MF_FORCEMINEFFECT");
 	export_constant(MF_NOLOCKON);
 	export_constant(MF_NOTOMB);
+	export_constant(MF_NOAUTOATTACK);
 	export_constant(MF_SKILL_DAMAGE);
 	export_constant(MF_NOCOSTUME);
 	export_constant(MF_GVG_TE_CASTLE);

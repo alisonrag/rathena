@@ -455,6 +455,23 @@ public:
 		bool roulette_open;
 		t_itemid item_reform;
 		uint64 item_enchant_index;
+		struct {
+			int x;
+			int y;
+			struct walkpath_data wpd;
+		} route;
+		struct {
+			int enabled;
+			int can_move;
+			int can_attack;
+			int use_potion_hp_min_percent;
+			int use_potion_sp_min_percent;
+			int use_fly_wing_hp_min_percent;
+			int target_id;
+			int timer;
+			block_list target;
+			t_tick delay; // delay autoattack
+		} auto_attack;
 	} state;
 	struct {
 		unsigned char no_weapon_damage, no_magic_damage, no_misc_damage;
