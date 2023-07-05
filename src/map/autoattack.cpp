@@ -250,10 +250,12 @@ void process_attack(map_session_data *sd)
             range = sd->battle_status.rhw.range;
             if (!check_distance_bl(&sd->bl, target, range))
             {
-                if(unit_walktobl(&sd->bl, target, range, 0) == 0) {
+                if (unit_walktobl(&sd->bl, target, range, 0) == 0)
+                {
                     ShowStatus("Drop target due to cant reach\n");
                     reset_route(sd);
                     sd->state.auto_attack.target.id = 0;
+                    return;
                 }
             }
             reset_route(sd);
@@ -272,54 +274,57 @@ void process_random_walk(map_session_data *sd)
     // has target?
     if (sd->state.auto_attack.target.id > 0)
         return;
+    
     // can move?
     if (sd->state.auto_attack.can_move != 1)
         return;
-    // has destination?
-    if (!sd->state.route.x && !sd->state.route.y)
-    {
-        short x = sd->bl.x, y = sd->bl.y;
-        if (map_search_freecell(&sd->bl, sd->bl.m, &x, &y, 32, 32, 2))
-        {
-            sd->state.route.x = x;
-            sd->state.route.y = y;
-            ShowStatus("random spot ok\n");
-        }
-        else
-        {
-            ShowStatus("random failed ok\n");
-            return;
-        }
-        if (path_search(&sd->state.route.wpd, sd->bl.m, sd->bl.x, sd->bl.y, x, y, 0, CELL_CHKWALL))
-        {
-            ShowStatus("path_search ok\n");
-        }
-        else
-        {
-            ShowStatus("path_search failed\n");
-            reset_route(sd);
-            return;
-        }
-    }
+
     // has reached the final destination?
-    if (sd->bl.x == sd->state.route.x && sd->bl.y == sd->state.route.y)
+    if (sd->state.route.x > 0 && sd->state.route.y > 0 && sd->bl.x == sd->state.route.x && sd->bl.y == sd->state.route.y)
     {
         ShowStatus("reached the dest\n");
         // closer to destination, reset it
         reset_route(sd);
         return;
     }
+
+    // has destination?
+    if (!sd->state.route.x && !sd->state.route.y)
+    {
+        int i = 0;
+        do
+        {
+            short x = sd->bl.x, y = sd->bl.y;
+            if (map_search_freecell(&sd->bl, sd->bl.m, &x, &y, 32, 32, 2)) // search random cell
+            {
+                // has portal in destination?
+                if(npc_check_areanpc(1,sd->bl.m,x,y,1))
+                    continue;
+                
+                // can reach?
+                if (path_search(&sd->state.route.wpd, sd->bl.m, sd->bl.x, sd->bl.y, x, y, 0, CELL_CHKNOPASS))
+                {
+                    sd->state.route.x = x;
+                    sd->state.route.y = y;
+                    ShowStatus("random spot ok\n");
+                    break;
+                }
+                else
+                {
+                    ShowStatus("random spot not ok\n");
+                }
+            }
+            i++;
+        } while (i < 10);
+    }
+
+    // try to route
     if (sd->state.route.x > 0 && sd->state.route.y > 0)
     {
-        ShowStatus("dest ok\n");
         ShowStatus("trying to walk to dest - %d,%d\n", sd->state.route.x, sd->state.route.y);
-        // has small dest?
-        // TODO: cut longest route in small pieces
-        // walk small distances
-        if (unit_walktoxy(&sd->bl, sd->state.route.x, sd->state.route.y, 4) == 0)
+        if (!unit_walktoxy(&sd->bl, sd->state.route.x, sd->state.route.y, 4))
         {
-            ShowStatus("Cant walk to dest reset");
-            reset_route(sd);
+            ShowStatus("route failed\n");
         }
     }
 }
