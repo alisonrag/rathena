@@ -7,6 +7,7 @@
 
 static char atcmd_output[CHAT_SIZE_MAX];
 
+// main loop
 void auto_attack_iterate(map_session_data *sd)
 {
     if (map_getmapflag(sd->bl.m, MF_NOAUTOATTACK) && sd->state.auto_attack.enabled)
@@ -38,6 +39,7 @@ void process_dead(map_session_data *sd)
     // return to saveMap or disable?
 }
 
+// use pots / heal itself
 void process_self_heal(map_session_data *sd)
 {
     if (sd->class_ == MAPID_ARCH_BISHOP || sd->class_ == MAPID_ARCH_BISHOP_T || sd->class_ == MAPID_CARDINAL)
@@ -74,6 +76,8 @@ void process_self_heal(map_session_data *sd)
     }
 }
 
+
+// buff itself using items registered in hotkey bar
 void process_self_buffs(map_session_data *sd)
 {
     int item_index;
@@ -155,6 +159,7 @@ void process_self_buffs(map_session_data *sd)
         }
     }
 
+    // random use buff registered
     if (rand() % 100 <= 15)
     {
         if (sd->status.hotkeys[5].type == 1 && skill_get_casttype(sd->status.hotkeys[5].id) == CAST_NODAMAGE)
@@ -178,6 +183,8 @@ void process_self_buffs(map_session_data *sd)
     }
 }
 
+// teleport if low life
+// TODO: add check to avoid use twice
 void process_teleport(map_session_data *sd)
 {
     if (sd->status.hotkeys[8].type == 0 && sd->status.hotkeys[8].id)
@@ -198,6 +205,7 @@ void process_auto_sit(map_session_data *sd)
 {
 }
 
+// search for target and attack it
 void process_attack(map_session_data *sd)
 {
     if (sd->state.auto_attack.can_attack != 1)
@@ -210,7 +218,7 @@ void process_attack(map_session_data *sd)
     {
         sd->state.auto_attack.target.id = 0;
 
-        if (map_foreachinshootarea(buildin_autoattack_sub, sd->bl.m, sd->bl.x - 14, sd->bl.y - 14, sd->bl.x + 14, sd->bl.y + 14, BL_MOB, &sd->state.auto_attack.target.id) == 0)
+        if (map_foreachinshootarea(buildin_autoattack_sub, sd->bl.m, sd->bl.x - 10, sd->bl.y - 10, sd->bl.x + 10, sd->bl.y + 10, BL_MOB, &sd->state.auto_attack.target.id) == 0)
         {
             return;
         }
@@ -229,7 +237,7 @@ void process_attack(map_session_data *sd)
         snprintf(atcmd_output, sizeof atcmd_output, msg_txt(sd, 1187), ((double)sd->state.autoloot) / 50.); // Autolooting items with drop rates of %0.02f%% and below.
 
         int random_hotkey_skill = rnd() % 5;
-        
+        // TODO: add check for sp and range
         if (sd->status.hotkeys[random_hotkey_skill].type == 1 && skill_get_casttype(sd->status.hotkeys[random_hotkey_skill].id) != CAST_GROUND && skill_get_casttype(sd->status.hotkeys[random_hotkey_skill].id) != CAST_NODAMAGE)
         {
             unit_skilluse_id(&sd->bl, sd->state.auto_attack.target.id, sd->status.hotkeys[random_hotkey_skill].id, pc_checkskill(sd, sd->status.hotkeys[random_hotkey_skill].id));
@@ -263,6 +271,7 @@ void process_attack(map_session_data *sd)
     }
 }
 
+// find a random place to walk
 void process_random_walk(map_session_data *sd)
 {
     // has target?
@@ -317,6 +326,7 @@ void process_random_walk(map_session_data *sd)
     }
 }
 
+// reset route
 void reset_route(map_session_data *sd)
 {
     sd->state.route.x = 0;
@@ -325,6 +335,7 @@ void reset_route(map_session_data *sd)
     sd->state.route.wpd.path_pos = 0;
 }
 
+// add target to target.id
 static int buildin_autoattack_sub(block_list *bl, va_list ap)
 {
     int *target_id = va_arg(ap, int *);
@@ -339,6 +350,7 @@ void resethotkey(int slot, map_session_data *sd)
     sd->status.hotkeys[slot].lv = 0;
 }
 
+// disable system
 void disable_auto_attack(map_session_data *sd)
 {
     sd->state.auto_attack.enabled = 0;
