@@ -212,35 +212,30 @@ void process_attack(map_session_data *sd)
 
         if (map_foreachinshootarea(buildin_autoattack_sub, sd->bl.m, sd->bl.x - 14, sd->bl.y - 14, sd->bl.x + 14, sd->bl.y + 14, BL_MOB, &sd->state.auto_attack.target.id) == 0)
         {
-            ShowStatus("Cant Find Target\n");
             return;
         }
     }
 
     if (sd->state.auto_attack.target.id && sd->state.auto_attack.target.id > 0 && sd->state.auto_attack.target.id != sd->bl.id)
     {
-        ShowStatus("Target found attack\n");
         struct block_list *target;
         target = map_id2bl(sd->state.auto_attack.target.id);
         if (target == NULL || status_isdead(target))
         {
             sd->state.auto_attack.target.id = 0;
-            ShowStatus("Target dead or missing\n");
             return;
         }
 
         snprintf(atcmd_output, sizeof atcmd_output, msg_txt(sd, 1187), ((double)sd->state.autoloot) / 50.); // Autolooting items with drop rates of %0.02f%% and below.
 
         int random_hotkey_skill = rnd() % 5;
-
+        
         if (sd->status.hotkeys[random_hotkey_skill].type == 1 && skill_get_casttype(sd->status.hotkeys[random_hotkey_skill].id) != CAST_GROUND && skill_get_casttype(sd->status.hotkeys[random_hotkey_skill].id) != CAST_NODAMAGE)
         {
-            ShowStatus("use skill 1\n");
             unit_skilluse_id(&sd->bl, sd->state.auto_attack.target.id, sd->status.hotkeys[random_hotkey_skill].id, pc_checkskill(sd, sd->status.hotkeys[random_hotkey_skill].id));
         }
         else if (sd->status.hotkeys[random_hotkey_skill].type == 1 && skill_get_casttype(sd->status.hotkeys[random_hotkey_skill].id) == CAST_GROUND)
         {
-            ShowStatus("use skill 2\n");
             unit_skilluse_pos(&sd->bl, target->x, target->y, sd->status.hotkeys[random_hotkey_skill].id, pc_checkskill(sd, sd->status.hotkeys[random_hotkey_skill].id));
         }
         else
@@ -253,7 +248,6 @@ void process_attack(map_session_data *sd)
                 if (unit_walktobl(&sd->bl, target, range, 0) == 0)
                 {
                     ShowStatus("Drop target due to cant reach\n");
-                    reset_route(sd);
                     sd->state.auto_attack.target.id = 0;
                     return;
                 }
@@ -282,7 +276,6 @@ void process_random_walk(map_session_data *sd)
     // has reached the final destination?
     if (sd->state.route.x > 0 && sd->state.route.y > 0 && sd->bl.x == sd->state.route.x && sd->bl.y == sd->state.route.y)
     {
-        ShowStatus("reached the dest\n");
         // closer to destination, reset it
         reset_route(sd);
         return;
@@ -298,7 +291,7 @@ void process_random_walk(map_session_data *sd)
             if (map_search_freecell(&sd->bl, sd->bl.m, &x, &y, 32, 32, 2)) // search random cell
             {
                 // has portal in destination?
-                if(npc_check_areanpc(1,sd->bl.m,x,y,1))
+                if(npc_check_areanpc(1,sd->bl.m,x,y,3) > 0)
                     continue;
                 
                 // can reach?
@@ -306,12 +299,7 @@ void process_random_walk(map_session_data *sd)
                 {
                     sd->state.route.x = x;
                     sd->state.route.y = y;
-                    ShowStatus("random spot ok\n");
                     break;
-                }
-                else
-                {
-                    ShowStatus("random spot not ok\n");
                 }
             }
             i++;
