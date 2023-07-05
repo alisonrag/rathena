@@ -28,9 +28,9 @@ void auto_attack_iterate(map_session_data *sd)
     process_self_heal(sd);
     process_self_buffs(sd);
     process_auto_sit(sd);
+    process_random_walk(sd);
     process_attack(sd);
     process_teleport(sd);
-    process_random_walk(sd);
 }
 
 void process_dead(map_session_data *sd)
@@ -200,99 +200,136 @@ void process_auto_sit(map_session_data *sd)
 
 void process_attack(map_session_data *sd)
 {
-    if (sd->state.auto_attack.can_attack == 1)
+    if (sd->state.auto_attack.can_attack != 1)
     {
-        ShowStatus("Can attack\n");
+        sd->state.auto_attack.target.id = 0;
+        return;
+    }
+
+    if (!sd->state.auto_attack.target.id)
+    {
         sd->state.auto_attack.target.id = 0;
 
-        map_foreachinarea(buildin_autoattack_sub, sd->bl.m, sd->bl.x - 10, sd->bl.y - 10, sd->bl.x + 10, sd->bl.y + 10, BL_MOB, &sd->state.auto_attack.target.id);
-
-        ShowStatus("Can attack %d -  my id %d\n ", sd->state.auto_attack.target.id, sd->bl.id);
-        if (sd->state.auto_attack.target.id && sd->state.auto_attack.target.id > 0 && sd->state.auto_attack.target.id != sd->bl.id)
+        if (map_foreachinshootarea(buildin_autoattack_sub, sd->bl.m, sd->bl.x - 14, sd->bl.y - 14, sd->bl.x + 14, sd->bl.y + 14, BL_MOB, &sd->state.auto_attack.target.id) == 0)
         {
-            ShowStatus("Target found attack\n");
-            unit_attack(&sd->bl, sd->state.auto_attack.target.id, 1);
+            ShowStatus("Cant Find Target\n");
+            return;
+        }
+    }
 
-            int random_hotkey_skill = rnd() % 5;
+    if (sd->state.auto_attack.target.id && sd->state.auto_attack.target.id > 0 && sd->state.auto_attack.target.id != sd->bl.id)
+    {
+        ShowStatus("Target found attack\n");
+        struct block_list *target;
+        target = map_id2bl(sd->state.auto_attack.target.id);
+        if (target == NULL || status_isdead(target))
+        {
+            sd->state.auto_attack.target.id = 0;
+            ShowStatus("Target dead or missing\n");
+            return;
+        }
 
-            if (sd->status.hotkeys[random_hotkey_skill].type == 1 && skill_get_casttype(sd->status.hotkeys[random_hotkey_skill].id) != CAST_GROUND && skill_get_casttype(sd->status.hotkeys[random_hotkey_skill].id) != CAST_NODAMAGE)
-            {
-                ShowStatus("use skill 1\n");
-                unit_skilluse_id(&sd->bl, sd->state.auto_attack.target.id, sd->status.hotkeys[random_hotkey_skill].id, pc_checkskill(sd, sd->status.hotkeys[random_hotkey_skill].id));
-            }
-            else if (sd->status.hotkeys[random_hotkey_skill].type == 1 && skill_get_casttype(sd->status.hotkeys[random_hotkey_skill].id) == CAST_GROUND)
-            {
-                ShowStatus("use skill 1\n");
-                unit_skilluse_pos(&sd->bl, sd->state.auto_attack.target.x, sd->state.auto_attack.target.y, sd->status.hotkeys[random_hotkey_skill].id, pc_checkskill(sd, sd->status.hotkeys[random_hotkey_skill].id));
-            }
-            snprintf(atcmd_output, sizeof atcmd_output, msg_txt(sd, 1187), ((double)sd->state.autoloot) / 50.); // Autolooting items with drop rates of %0.02f%% and below.
+        snprintf(atcmd_output, sizeof atcmd_output, msg_txt(sd, 1187), ((double)sd->state.autoloot) / 50.); // Autolooting items with drop rates of %0.02f%% and below.
+
+        int random_hotkey_skill = rnd() % 5;
+
+        if (sd->status.hotkeys[random_hotkey_skill].type == 1 && skill_get_casttype(sd->status.hotkeys[random_hotkey_skill].id) != CAST_GROUND && skill_get_casttype(sd->status.hotkeys[random_hotkey_skill].id) != CAST_NODAMAGE)
+        {
+            ShowStatus("use skill 1\n");
+            unit_skilluse_id(&sd->bl, sd->state.auto_attack.target.id, sd->status.hotkeys[random_hotkey_skill].id, pc_checkskill(sd, sd->status.hotkeys[random_hotkey_skill].id));
+        }
+        else if (sd->status.hotkeys[random_hotkey_skill].type == 1 && skill_get_casttype(sd->status.hotkeys[random_hotkey_skill].id) == CAST_GROUND)
+        {
+            ShowStatus("use skill 2\n");
+            unit_skilluse_pos(&sd->bl, target->x, target->y, sd->status.hotkeys[random_hotkey_skill].id, pc_checkskill(sd, sd->status.hotkeys[random_hotkey_skill].id));
         }
         else
         {
-            sd->state.auto_attack.target.id = 0;
-            // sd->state.auto_attack.target = nullptr;
+            // in range ?
+            int range;
+            range = sd->battle_status.rhw.range;
+            if (!check_distance_bl(&sd->bl, target, range))
+            {
+                if(unit_walktobl(&sd->bl, target, range, 0) == 0) {
+                    ShowStatus("Drop target due to cant reach\n");
+                    reset_route(sd);
+                    sd->state.auto_attack.target.id = 0;
+                }
+            }
+            reset_route(sd);
+            unit_attack(&sd->bl, sd->state.auto_attack.target.id, 1);
         }
     }
     else
     {
         sd->state.auto_attack.target.id = 0;
+        return;
     }
 }
 
 void process_random_walk(map_session_data *sd)
 {
-    ShowStatus("can random walk\n");
     // has target?
     if (sd->state.auto_attack.target.id > 0)
         return;
-    ShowStatus("can move, non target %d\n", sd->state.auto_attack.can_move);
     // can move?
     if (sd->state.auto_attack.can_move != 1)
         return;
-    ShowStatus("can move, can move\n");
     // has destination?
-    if (sd->state.route.x && sd->state.route.y)
+    if (!sd->state.route.x && !sd->state.route.y)
     {
-        ShowStatus("dest ok\n");
-        // has reached the final destination?
-        if (sd->bl.x == sd->state.route.x && sd->bl.y == sd->state.route.y)
-        {
-            ShowStatus("reached the dest\n");
-            // closer to destination, reset it
-            sd->state.route.x = 0;
-            sd->state.route.y = 0;
-            sd->state.route.wpd.path_len = 0;
-            sd->state.route.wpd.path_pos = 0;
-        }
-        else
-        {
-            ShowStatus("trying to walk to dest - %d,%d\n", sd->state.route.x, sd->state.route.y);
-            // has small dest?
-            // TODO: cut longest route in small pieces
-            // walk small distances
-            unit_walktoxy(&sd->bl, sd->state.route.x, sd->state.route.y, 4);
-        }
-    }
-    else // get random spot to walk
-    {
-        ShowStatus("trying to get random spot\n");
-
-        int x, y;
-        struct map_data *mapdata = map_getmapdata(sd->bl.m);
-        int i = 0;
-        do
-        {
-            x = rnd() % (mapdata->xs - 2) + 1;
-            y = rnd() % (mapdata->ys - 2) + 1;
-        } while ((map_getcell(sd->bl.m, x, y, CELL_CHKNOPASS) || (!battle_config.teleport_on_portal && npc_check_areanpc(1, sd->bl.m, x, y, 1))) && (i++) < 1000);
-
-        if (i < 1000)
+        short x = sd->bl.x, y = sd->bl.y;
+        if (map_search_freecell(&sd->bl, sd->bl.m, &x, &y, 32, 32, 2))
         {
             sd->state.route.x = x;
             sd->state.route.y = y;
-            path_search(&sd->state.route.wpd, sd->bl.m, sd->bl.x, sd->bl.y, x, y, 0, CELL_CHKWALL);
+            ShowStatus("random spot ok\n");
+        }
+        else
+        {
+            ShowStatus("random failed ok\n");
+            return;
+        }
+        if (path_search(&sd->state.route.wpd, sd->bl.m, sd->bl.x, sd->bl.y, x, y, 0, CELL_CHKWALL))
+        {
+            ShowStatus("path_search ok\n");
+        }
+        else
+        {
+            ShowStatus("path_search failed\n");
+            reset_route(sd);
+            return;
         }
     }
+    // has reached the final destination?
+    if (sd->bl.x == sd->state.route.x && sd->bl.y == sd->state.route.y)
+    {
+        ShowStatus("reached the dest\n");
+        // closer to destination, reset it
+        reset_route(sd);
+        return;
+    }
+    if (sd->state.route.x > 0 && sd->state.route.y > 0)
+    {
+        ShowStatus("dest ok\n");
+        ShowStatus("trying to walk to dest - %d,%d\n", sd->state.route.x, sd->state.route.y);
+        // has small dest?
+        // TODO: cut longest route in small pieces
+        // walk small distances
+        if (unit_walktoxy(&sd->bl, sd->state.route.x, sd->state.route.y, 4) == 0)
+        {
+            ShowStatus("Cant walk to dest reset");
+            reset_route(sd);
+        }
+    }
+}
+
+void reset_route(map_session_data *sd)
+{
+    sd->state.route.x = 0;
+    sd->state.route.y = 0;
+    sd->state.route.wpd.path_len = 0;
+    sd->state.route.wpd.path_pos = 0;
 }
 
 static int buildin_autoattack_sub(block_list *bl, va_list ap)

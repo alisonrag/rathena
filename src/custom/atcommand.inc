@@ -37,8 +37,8 @@ TIMER_FUNC(autoattack_timer)
 			return 0;
 		}
 		else {
-			sd->state.auto_attack.timer = add_timer(gettick() + 1000, autoattack_timer, sd->bl.id, 0);
-			sd->state.auto_attack.delay = gettick() + 1000;
+			sd->state.auto_attack.timer = add_timer(gettick() + 500, autoattack_timer, sd->bl.id, 0);
+			sd->state.auto_attack.delay = gettick() + 500;
 		}
 	}
 	return 0;
@@ -57,7 +57,6 @@ ACMD_FUNC(autoattack)
 	int min_sp_percent;
 	int min_hp_percent_fly_wing;
 	
-	ShowStatus("message: %s", message);
 	if (!message || !*message || sscanf(message, "%d %d %d %d %d",&auto_attack_enabled, &auto_attack_can_move, &min_hp_percent, &min_sp_percent, &min_hp_percent_fly_wing) < 5)
 	{
         clif_displaymessage(sd->fd, "*-----------------------[ :+: Auto Mode :+: ]------------------------*");
@@ -90,10 +89,9 @@ ACMD_FUNC(autoattack)
 		sd->state.auto_attack.use_potion_sp_min_percent = (min_sp_percent) ? min_sp_percent : 0;
 		sd->state.auto_attack.use_fly_wing_hp_min_percent = (min_hp_percent_fly_wing) ? min_hp_percent_fly_wing : 0;
 		sd->state.autoloot = 10000;
-		sd->state.auto_attack.delay = gettick() + 1000;
+		sd->state.auto_attack.delay = gettick() + 500;
 		clif_hotkeys_send(sd,1);
-		ShowStatus("hp: %d - sp: %d - fw: %d\n",min_hp_percent,min_sp_percent,min_hp_percent_fly_wing);
-		(auto_attack_can_move) ? clif_displaymessage(sd->fd, "Auto Attack - Automatic: ON.") : clif_displaymessage(fd, "Auto Attack - Retaliate: ON.");
+		(auto_attack_can_move) ? clif_displaymessage(sd->fd, "Auto Attack - Automatic: ON.") : clif_displaymessage(sd->fd, "Auto Attack - Retaliate: ON.");
 
 		sd->state.auto_attack.timer = add_timer(gettick() + 1000, autoattack_timer, sd->bl.id, 0);
 	} 
