@@ -16,7 +16,7 @@
 -	script	Healer	-1,{
 
 	.@Price = 0;	// Zeny required for heal
-	.@Buffs = 1;	// Also buff players? (1: yes / 0: no)
+	.@Buffs = 0;	// Also buff players? (1: yes / 0: no)
 	.@Delay = 0;	// Heal delay, in seconds
 
 	if (@HD > gettimetick(2))
@@ -36,43 +36,6 @@
 		sc_start SC_INCREASEAGI,240000,10;
 		specialeffect2 EF_BLESSING;
 		sc_start SC_BLESSING,240000,10;
-		skilleffect 384,0; sc_start SC_MELTDOWN,360000,5;
-		skilleffect 383,0; sc_start SC_WINDWALK,360000,5;
-		skilleffect 378,0; sc_start SC_EDP,360000,5;
-		skilleffect 465,0; sc_start SC_KAITE,360000,7;
-		skilleffect 464,0; sc_start SC_KAUPE,360000,3;
-		skilleffect 463,0; sc_start SC_KAAHI,360000,7;
-		skilleffect 462,0; sc_start SC_KAIZEL,360000,7;
-		skilleffect 8,0; sc_start SC_ENDURE,360000,10;
-		skilleffect 33,0; sc_start SC_ANGELUS,360000,10;
-		skilleffect 45,0; sc_start SC_CONCENTRATE,360000,10;
-		skilleffect 74,0; sc_start SC_MAGNIFICAT,360000,5;
-		skilleffect 75,0; sc_start SC_GLORIA,360000,5;
-		skilleffect 459,0; sc_start SC_ADRENALINE2,360000,1;
-		skilleffect 66,0; sc_start SC_IMPOSITIO,360000,5;
-		skilleffect 67,0; sc_start SC_SUFFRAGIUM,360000,3;
-		skilleffect 34,0; sc_start SC_BLESSING,360000,10;
-		skilleffect 29,0; sc_start SC_INCREASEAGI,360000,10;
-		skilleffect 112,0; sc_start SC_WEAPONPERFECTION,360000,10;
-		skilleffect 113,0; sc_start SC_OVERTHRUST,360000,5;
-		skilleffect 114,0; sc_start SC_MAXIMIZEPOWER,360000,5;
-		skilleffect 357,0; sc_start SC_CONCENTRATION,360000,5;
-		skilleffect 355,0; sc_start SC_AURABLADE,360000,5;
-		skilleffect 155,0; sc_start SC_LOUD,360000,1;
-		skilleffect 157,0; sc_start SC_ENERGYCOAT,360000,1;
-		sc_start SC_ASPDPOTION2,360000,0;
-		sc_start SC_STRFood,360000,10;
-		sc_start SC_AGIFood,360000,10;
-		sc_start SC_VITFood,360000,10;
-		sc_start SC_INTFood,360000,10;
-		sc_start SC_DEXFood,360000,10;
-		sc_start SC_LUKFood,360000,10;
-		sc_start SC_HitFood,1200000,30;
-		sc_start SC_FleeFood,1200000,30;
-		sc_start SC_BATKFood,1200000,10;
-		sc_start SC_MATKFood,120000,10;
-		skilleffect 380,0; sc_start SC_TRUESIGHT,360000,5;
-		skilleffect 361,0; sc_start SC_ASSUMPTIO,360000,5;
 	}
 	if (.@Delay)
 		@HD = gettimetick(2) + .@Delay;
