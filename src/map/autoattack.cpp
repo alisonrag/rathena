@@ -380,8 +380,7 @@ void resethotkey(int slot, map_session_data *sd)
 // disable system
 void disable_auto_attack(map_session_data *sd)
 {
-    int effectID = 38;
-    clif_hat_effect_single(sd, effectID, false);
+    clif_hat_effect_single( sd, HAT_EF_C_BLESSINGS_OF_SOUL, false );
     sd->state.auto_attack.enabled = 0;
     sd->state.auto_attack.can_move = 0;
     sd->state.auto_attack.can_attack = 0; // TODO: check the difference between auto_attack_enabled and auto_attack_can_attack

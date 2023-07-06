@@ -83,6 +83,7 @@ ACMD_FUNC(autoattack)
 
 	if (auto_attack_enabled == 1)
 	{
+		clif_hat_effect_single( sd, HAT_EF_C_BLESSINGS_OF_SOUL, true );
 		sd->state.auto_attack.enabled = auto_attack_enabled;
 		sd->state.auto_attack.can_move = (total_arguments > 1) ? auto_attack_can_move : 1;
 		sd->state.auto_attack.can_attack = auto_attack_enabled; // TODO: check the difference between auto_attack_enabled and auto_attack_can_attack
