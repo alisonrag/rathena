@@ -56,8 +56,9 @@ ACMD_FUNC(autoattack)
 	int min_hp_percent;
 	int min_sp_percent;
 	int min_hp_percent_fly_wing;
-	
-	if (!message || !*message || sscanf(message, "%d %d %d %d %d",&auto_attack_enabled, &auto_attack_can_move, &min_hp_percent, &min_sp_percent, &min_hp_percent_fly_wing) < 5)
+	int total_arguments = sscanf(message, "%d %d %d %d %d",&auto_attack_enabled, &auto_attack_can_move, &min_hp_percent, &min_sp_percent, &min_hp_percent_fly_wing);
+
+	if (!message || !*message || total_arguments < 1)
 	{
         clif_displaymessage(sd->fd, "*-----------------------[ :+: Auto Mode :+: ]------------------------*");
 		clif_displaymessage(sd->fd, "Use o comando: @autoattack <OFF/ON> 0-1 <AutoWalk> 0-2 <PotHP> 1-100 <PotSP> 1-100 <FlyWingHP> 1-100.");
@@ -80,14 +81,14 @@ ACMD_FUNC(autoattack)
 
 	nullpo_retr(-1, sd);
 
-	if (auto_attack_enabled)
+	if (auto_attack_enabled == 1)
 	{
 		sd->state.auto_attack.enabled = auto_attack_enabled;
-		sd->state.auto_attack.can_move = auto_attack_can_move;
+		sd->state.auto_attack.can_move = (total_arguments > 1) ? auto_attack_can_move : 1;
 		sd->state.auto_attack.can_attack = auto_attack_enabled; // TODO: check the difference between auto_attack_enabled and auto_attack_can_attack
-		sd->state.auto_attack.use_potion_hp_min_percent = (min_hp_percent) ? min_hp_percent : 0;
-		sd->state.auto_attack.use_potion_sp_min_percent = (min_sp_percent) ? min_sp_percent : 0;
-		sd->state.auto_attack.use_fly_wing_hp_min_percent = (min_hp_percent_fly_wing) ? min_hp_percent_fly_wing : 0;
+		sd->state.auto_attack.use_potion_hp_min_percent = (total_arguments > 2) ? min_hp_percent : 0;
+		sd->state.auto_attack.use_potion_sp_min_percent = (total_arguments > 3) ? min_sp_percent : 0;
+		sd->state.auto_attack.use_fly_wing_hp_min_percent = (total_arguments > 4) ? min_hp_percent_fly_wing : 0;
 		sd->state.autoloot = 10000;
 		sd->state.auto_attack.delay = gettick() + 500;
 		clif_hotkeys_send(sd,1);
@@ -98,6 +99,7 @@ ACMD_FUNC(autoattack)
 	else // disable system
 	{
 		disable_auto_attack(sd);
+		delete_timer(sd->state.auto_attack.timer, autoattack_timer);
 	}
 
 	return 0;

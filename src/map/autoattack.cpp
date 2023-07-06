@@ -362,6 +362,5 @@ void disable_auto_attack(map_session_data *sd)
     sd->state.autoloot = 0;
     // sd->auto_attack_delay = gettick() + 1000; // check how to disable timer
     unit_stop_attack(&sd->bl);
-    sd->state.auto_attack.timer = INVALID_TIMER;
     clif_displaymessage(sd->fd, "Auto Attack - Automatic: OFF.");
 }
