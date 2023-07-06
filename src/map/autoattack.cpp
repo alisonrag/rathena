@@ -1,4 +1,3 @@
-
 #include <map/autoattack.hpp>
 #include <map/npc.hpp>
 #include <common/showmsg.hpp>
@@ -26,12 +25,19 @@ void auto_attack_iterate(map_session_data *sd)
     if (pc_isdead(sd))
         return;
 
-    process_self_heal(sd);
+    if (sd->state.auto_attack.use_potion_hp_min_percent > 0 && sd->state.auto_attack.use_potion_hp_min_percent < 100)
+        process_self_heal(sd);
+
     process_self_buffs(sd);
     process_auto_sit(sd);
-    process_random_walk(sd);
+
+    if (sd->state.auto_attack.can_move)
+        process_random_walk(sd);
+
     process_attack(sd);
-    process_teleport(sd);
+
+    if (sd->state.auto_attack.use_fly_wing_hp_min_percent > 0 && sd->state.auto_attack.use_fly_wing_hp_min_percent < 100)
+        process_teleport(sd);
 }
 
 void process_dead(map_session_data *sd)
@@ -75,7 +81,6 @@ void process_self_heal(map_session_data *sd)
         }
     }
 }
-
 
 // buff itself using items registered in hotkey bar
 void process_self_buffs(map_session_data *sd)
@@ -214,15 +219,21 @@ void process_attack(map_session_data *sd)
         return;
     }
 
-    if (!sd->state.auto_attack.target.id)
+    for (int i = 1; i <= 3; i++)
     {
-        sd->state.auto_attack.target.id = 0;
-
-        if (map_foreachinshootarea(buildin_autoattack_sub, sd->bl.m, sd->bl.x - 10, sd->bl.y - 10, sd->bl.x + 10, sd->bl.y + 10, BL_MOB, &sd->state.auto_attack.target.id) == 0)
+        map_foreachinshootarea(buildin_autoattack_sub, sd->bl.m, sd->bl.x - (i * 5), sd->bl.y - (i * 5), sd->bl.x + (i * 5), sd->bl.y + (i * 5), BL_MOB, &sd->state.auto_attack.target.id, CELL_CHKCLIFF, CELL_CHKNOPASS, CELL_CHKWALL);
+        if (&sd->state.auto_attack.target.id)
         {
-            return;
+            break;
+        }
+        else
+        {
+            sd->state.auto_attack.target.id = 0;
         }
     }
+
+    if (sd->state.auto_attack.target.id == 0)
+        return;
 
     if (sd->state.auto_attack.target.id && sd->state.auto_attack.target.id > 0 && sd->state.auto_attack.target.id != sd->bl.id)
     {
@@ -238,31 +249,28 @@ void process_attack(map_session_data *sd)
 
         int random_hotkey_skill = rnd() % 5;
         // TODO: add check for sp and range
-        if (sd->status.hotkeys[random_hotkey_skill].type == 1 && skill_get_casttype(sd->status.hotkeys[random_hotkey_skill].id) != CAST_GROUND && skill_get_casttype(sd->status.hotkeys[random_hotkey_skill].id) != CAST_NODAMAGE)
+        if (sd->status.hotkeys[random_hotkey_skill].type == 1 && skill_get_casttype(sd->status.hotkeys[random_hotkey_skill].id) != CAST_GROUND && skill_get_casttype(sd->status.hotkeys[random_hotkey_skill].id) != CAST_NODAMAGE && (sd->battle_status.sp * 100) / sd->battle_status.max_sp >= 10)
         {
             unit_skilluse_id(&sd->bl, sd->state.auto_attack.target.id, sd->status.hotkeys[random_hotkey_skill].id, pc_checkskill(sd, sd->status.hotkeys[random_hotkey_skill].id));
         }
-        else if (sd->status.hotkeys[random_hotkey_skill].type == 1 && skill_get_casttype(sd->status.hotkeys[random_hotkey_skill].id) == CAST_GROUND)
+        else if (sd->status.hotkeys[random_hotkey_skill].type == 1 && skill_get_casttype(sd->status.hotkeys[random_hotkey_skill].id) == CAST_GROUND && (sd->battle_status.sp * 100) / sd->battle_status.max_sp >= 10)
         {
             unit_skilluse_pos(&sd->bl, target->x, target->y, sd->status.hotkeys[random_hotkey_skill].id, pc_checkskill(sd, sd->status.hotkeys[random_hotkey_skill].id));
         }
-        else
+        // in range ?
+        int range;
+        range = sd->battle_status.rhw.range;
+        if (!check_distance_bl(&sd->bl, target, range))
         {
-            // in range ?
-            int range;
-            range = sd->battle_status.rhw.range;
-            if (!check_distance_bl(&sd->bl, target, range))
+            if (unit_walktobl(&sd->bl, target, range, 1) == 0)
             {
-                if (unit_walktobl(&sd->bl, target, range, 0) == 0)
-                {
-                    ShowStatus("Drop target due to cant reach\n");
-                    sd->state.auto_attack.target.id = 0;
-                    return;
-                }
+                ShowStatus("Drop target due to cant reach\n");
+                sd->state.auto_attack.target.id = 0;
+                return;
             }
-            reset_route(sd);
-            unit_attack(&sd->bl, sd->state.auto_attack.target.id, 1);
         }
+        unit_attack(&sd->bl, sd->state.auto_attack.target.id, 1);
+        reset_route(sd);
     }
     else
     {
@@ -277,7 +285,7 @@ void process_random_walk(map_session_data *sd)
     // has target?
     if (sd->state.auto_attack.target.id > 0)
         return;
-    
+
     // can move?
     if (sd->state.auto_attack.can_move != 1)
         return;
@@ -297,12 +305,12 @@ void process_random_walk(map_session_data *sd)
         do
         {
             short x = sd->bl.x, y = sd->bl.y;
-            if (map_search_freecell(&sd->bl, sd->bl.m, &x, &y, 32, 32, 2)) // search random cell
+            if (map_search_freecell(&sd->bl, sd->bl.m, &x, &y, 25, 25, 2)) // search random cell
             {
                 // has portal in destination?
-                if(npc_check_areanpc(1,sd->bl.m,x,y,3) > 0)
+                if (npc_check_areanpc(1, sd->bl.m, x, y, 3) > 0)
                     continue;
-                
+
                 // can reach?
                 if (path_search(&sd->state.route.wpd, sd->bl.m, sd->bl.x, sd->bl.y, x, y, 0, CELL_CHKNOPASS))
                 {
@@ -321,7 +329,27 @@ void process_random_walk(map_session_data *sd)
         ShowStatus("trying to walk to dest - %d,%d\n", sd->state.route.x, sd->state.route.y);
         if (!unit_walktoxy(&sd->bl, sd->state.route.x, sd->state.route.y, 4))
         {
-            ShowStatus("route failed\n");
+            // try rand route
+            short x = sd->bl.x, y = sd->bl.y;
+            int intermediateX, intermediateY;
+            int dx, dy, distance;
+            dx = sd->state.route.x - x;
+            dy = sd->state.route.y - y;
+            distance = static_cast<int>(sqrt(sd->bl.x * dx + sd->bl.y * dy));
+            int stepCount;
+            stepCount = distance / 10; // Número de passos intermediários
+            intermediateX = x + (rand() % 5 + 1);
+            intermediateY = y + (rand() % 5 + 1);
+            if (distance > 10)
+            {
+                intermediateX = x + (dx / stepCount);
+                intermediateY = y + (dy / stepCount);
+            }
+            ShowStatus("trying to walk to altrout - %d,%d\n", intermediateX, intermediateY);
+            if (!unit_walktoxy(&sd->bl, intermediateX, intermediateY, 4))
+            {
+                ShowStatus("route failed\n");
+            }
         }
     }
 }
@@ -353,6 +381,8 @@ void resethotkey(int slot, map_session_data *sd)
 // disable system
 void disable_auto_attack(map_session_data *sd)
 {
+    int effectID = 38;
+    clif_hat_effect_single(sd, effectID, false);
     sd->state.auto_attack.enabled = 0;
     sd->state.auto_attack.can_move = 0;
     sd->state.auto_attack.can_attack = 0; // TODO: check the difference between auto_attack_enabled and auto_attack_can_attack
@@ -360,7 +390,6 @@ void disable_auto_attack(map_session_data *sd)
     sd->state.auto_attack.use_potion_sp_min_percent = 0;
     sd->state.auto_attack.use_fly_wing_hp_min_percent = 0;
     sd->state.autoloot = 0;
-    // sd->auto_attack_delay = gettick() + 1000; // check how to disable timer
     unit_stop_attack(&sd->bl);
     clif_displaymessage(sd->fd, "Auto Attack - Automatic: OFF.");
 }
