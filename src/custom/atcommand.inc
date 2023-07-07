@@ -18,6 +18,7 @@
 //	return 0;
 //}
 
+
 #include <map/autoattack.hpp>
 
 TIMER_FUNC(autoattack_timer)
@@ -37,8 +38,8 @@ TIMER_FUNC(autoattack_timer)
 			return 0;
 		}
 		else {
-			sd->state.auto_attack.timer = add_timer(gettick() + 500, autoattack_timer, sd->bl.id, 0);
-			sd->state.auto_attack.delay = gettick() + 500;
+			sd->state.auto_attack.timer = add_timer(gettick() + 400, autoattack_timer, sd->bl.id, 0);
+			sd->state.auto_attack.delay = gettick() + 400;
 		}
 	}
 	return 0;
@@ -56,7 +57,8 @@ ACMD_FUNC(autoattack)
 	int min_hp_percent;
 	int min_sp_percent;
 	int min_hp_percent_fly_wing;
-	int total_arguments = sscanf(message, "%d %d %d %d %d",&auto_attack_enabled, &auto_attack_can_move, &min_hp_percent, &min_sp_percent, &min_hp_percent_fly_wing);
+	int auto_attack_can_sit;
+	int total_arguments = sscanf(message, "%d %d %d %d %d %d",&auto_attack_enabled, &auto_attack_can_move, &min_hp_percent, &min_sp_percent, &min_hp_percent_fly_wing, &auto_attack_can_sit);
 
 	if (!message || !*message || total_arguments < 1)
 	{
@@ -81,7 +83,8 @@ ACMD_FUNC(autoattack)
 
 	nullpo_retr(-1, sd);
 
-	if (auto_attack_enabled == 1)
+	//disable system if it enabled
+	if (!sd->state.auto_attack.enabled && auto_attack_enabled == 1)
 	{
 		clif_hat_effect_single( sd, HAT_EF_C_BLESSINGS_OF_SOUL, true );
 		sd->state.auto_attack.enabled = auto_attack_enabled;
@@ -90,8 +93,9 @@ ACMD_FUNC(autoattack)
 		sd->state.auto_attack.use_potion_hp_min_percent = (total_arguments > 2) ? min_hp_percent : 0;
 		sd->state.auto_attack.use_potion_sp_min_percent = (total_arguments > 3) ? min_sp_percent : 0;
 		sd->state.auto_attack.use_fly_wing_hp_min_percent = (total_arguments > 4) ? min_hp_percent_fly_wing : 0;
+		sd->state.auto_attack.can_sit = (total_arguments > 5) ? auto_attack_can_sit : 0;
 		sd->state.autoloot = 10000;
-		sd->state.auto_attack.delay = gettick() + 500;
+		sd->state.auto_attack.delay = gettick() + 400;
 		clif_hotkeys_send(sd,1);
 		(auto_attack_can_move) ? clif_displaymessage(sd->fd, "Auto Attack - Automatic: ON.") : clif_displaymessage(sd->fd, "Auto Attack - Retaliate: ON.");
 
@@ -99,9 +103,9 @@ ACMD_FUNC(autoattack)
 	} 
 	else // disable system
 	{
+		delete_timer(sd->state.auto_attack.timer, autoattack_timer); //timer need to be deleted first here to avoid Error on Map-server
 		disable_auto_attack(sd);
-		delete_timer(sd->state.auto_attack.timer, autoattack_timer);
 	}
-
+	
 	return 0;
 }

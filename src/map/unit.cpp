@@ -96,13 +96,13 @@ int unit_walktoxy_sub(struct block_list *bl)
 
 	if( !path_search(&wpd,bl->m,bl->x,bl->y,ud->to_x,ud->to_y,ud->state.walk_easy,CELL_CHKNOPASS) )
 		return 0;
-//
-//#ifdef OFFICIAL_WALKPATH
-//	if( bl->type != BL_NPC // If type is a NPC, please disregard.
-//		&& wpd.path_len > 14 // Official number of walkable cells is 14 if and only if there is an obstacle between. [malufett]
-//		&& !path_search_long(nullptr, bl->m, bl->x, bl->y, ud->to_x, ud->to_y, CELL_CHKNOPASS) ) // Check if there is an obstacle between
-//			return 0;
-//#endif
+
+#ifdef OFFICIAL_WALKPATH
+	if( bl->type != BL_NPC // If type is a NPC, please disregard.
+		&& wpd.path_len > 14 // Official number of walkable cells is 14 if and only if there is an obstacle between. [malufett]
+		&& !path_search_long(nullptr, bl->m, bl->x, bl->y, ud->to_x, ud->to_y, CELL_CHKNOPASS) ) // Check if there is an obstacle between
+			return 0;
+#endif
 
 	ud->walkpath = wpd;
 
@@ -745,7 +745,7 @@ int unit_walktoxy( struct block_list *bl, short x, short y, unsigned char flag)
 //#ifdef OFFICIAL_WALKPATH
 //		// Official number of walkable cells is 14 if and only if there is an obstacle between.
 //		if( wpd.path_len > 14 && !path_search_long( nullptr, bl->m, bl->x, bl->y, x, y, CELL_CHKNOPASS ) ){
-//			return 0;
+//			return 0;/
 //		}
 //#endif
 //	}

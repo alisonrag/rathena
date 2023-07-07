@@ -11,7 +11,7 @@ enum cell_chk : uint8;
 #define MOVE_COST 10
 #define MOVE_DIAGONAL_COST 14
 
-#define MAX_WALKPATH 64
+#define MAX_WALKPATH 128
 
 enum directions : int8 {
 	DIR_CENTER = -1,
