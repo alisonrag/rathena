@@ -295,6 +295,7 @@ void process_attack(map_session_data *sd)
                 //ShowMessage("dropping target due to unit_attack failed\n");
                 return;
             }
+            recalculate_route(sd);
         }
 
         // can we reach the target?
@@ -316,7 +317,7 @@ void process_attack(map_session_data *sd)
         {
             if (unit_walktobl(&sd->bl, target, range, 0))
             {
-                recalculate_route(sd);
+                //ShowMessage("can move to target\n");
             }
         }
     }
@@ -387,7 +388,7 @@ void process_random_walk(map_session_data *sd)
                     temp_x += dirx[sd->state.route.wpd.path[i]];
                     temp_y += diry[sd->state.route.wpd.path[i]];
                     // //ShowStatus("path data: [%d] (%d, %d) - dir: %d \n", i, temp_x, temp_y, sd->state.route.wpd.path[i]);
-                    if (i % 4 == 0 || i == sd->state.route.wpd.path_len - 1)
+                    if (i % 6 == 0 || i == sd->state.route.wpd.path_len - 1)
                     {
                         sd->state.route.route_steps[c].x = temp_x;
                         sd->state.route.route_steps[c].y = temp_y;
@@ -406,7 +407,7 @@ void process_random_walk(map_session_data *sd)
     if (sd->state.route.x > 0 && sd->state.route.y > 0)
     {
 
-        if (!check_distance_blxy(&sd->bl, sd->state.route.route_steps[sd->state.route.current_step - 1].x, sd->state.route.route_steps[sd->state.route.current_step - 1].y, 4))
+        if (!check_distance_blxy(&sd->bl, sd->state.route.route_steps[sd->state.route.current_step - 1].x, sd->state.route.route_steps[sd->state.route.current_step - 1].y, 6))
         {
             //ShowStatus("away from route recaulculate - %d,%d\n", sd->state.route.x, sd->state.route.y);
             reset_route(sd);

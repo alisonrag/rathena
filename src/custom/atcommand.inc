@@ -38,8 +38,8 @@ TIMER_FUNC(autoattack_timer)
 			return 0;
 		}
 		else {
-			sd->state.auto_attack.timer = add_timer(gettick() + 400, autoattack_timer, sd->bl.id, 0);
-			sd->state.auto_attack.delay = gettick() + 400;
+			sd->state.auto_attack.timer = add_timer(gettick() + 333, autoattack_timer, sd->bl.id, 0);
+			sd->state.auto_attack.delay = gettick() + 333;
 		}
 	}
 	return 0;
@@ -95,7 +95,7 @@ ACMD_FUNC(autoattack)
 		sd->state.auto_attack.use_fly_wing_hp_min_percent = (total_arguments > 4) ? min_hp_percent_fly_wing : 0;
 		sd->state.auto_attack.can_sit = (total_arguments > 5) ? auto_attack_can_sit : 0;
 		sd->state.autoloot = 10000;
-		sd->state.auto_attack.delay = gettick() + 400;
+		sd->state.auto_attack.delay = gettick() + 333;
 		clif_hotkeys_send(sd,1);
 		(auto_attack_can_move) ? clif_displaymessage(sd->fd, "Auto Attack - Automatic: ON.") : clif_displaymessage(sd->fd, "Auto Attack - Retaliate: ON.");
 
