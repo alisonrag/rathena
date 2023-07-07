@@ -388,7 +388,7 @@ void process_random_walk(map_session_data *sd)
                     temp_x += dirx[sd->state.route.wpd.path[i]];
                     temp_y += diry[sd->state.route.wpd.path[i]];
                     // //ShowStatus("path data: [%d] (%d, %d) - dir: %d \n", i, temp_x, temp_y, sd->state.route.wpd.path[i]);
-                    if (i % 6 == 0 || i == sd->state.route.wpd.path_len - 1)
+                    if (i % 6 == 5 || i == sd->state.route.wpd.path_len - 1)
                     {
                         sd->state.route.route_steps[c].x = temp_x;
                         sd->state.route.route_steps[c].y = temp_y;
@@ -441,7 +441,7 @@ void recalculate_route(map_session_data *sd)
             temp_x += dirx[sd->state.route.wpd.path[i]];
             temp_y += diry[sd->state.route.wpd.path[i]];
             // //ShowStatus("path data: [%d] (%d, %d) - dir: %d \n", i, temp_x, temp_y, sd->state.route.wpd.path[i]);
-            if (i % 5 == 0 || i == sd->state.route.wpd.path_len - 1)
+            if (i % 6 == 5 || i == sd->state.route.wpd.path_len - 1)
             {
                 sd->state.route.route_steps[c].x = temp_x;
                 sd->state.route.route_steps[c].y = temp_y;
