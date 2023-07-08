@@ -18,3 +18,4 @@ void process_dead(map_session_data *sd);
 void disable_auto_attack(map_session_data *sd);
 void reset_route(map_session_data *sd);
 void recalculate_route(map_session_data *sd);
+bool has_more_target(map_session_data *sd);

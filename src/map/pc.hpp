@@ -467,6 +467,7 @@ public:
             struct walkpath_data wpd;
 			short current_step;
 			short steps_len;
+			bool sent_route_move;
 			s_route_steps route_steps[MAX_WALKPATH];
         } route;
         struct {
