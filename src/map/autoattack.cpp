@@ -231,12 +231,11 @@ bool has_more_target(map_session_data *sd)
     }
     for (int i = 5; i <= 13; i += 4)
     {
-        if (map_foreachinshootarea(buildin_autoattack_sub, sd->bl.m, sd->bl.x - i, sd->bl.y - i, sd->bl.x + i, sd->bl.y + i, BL_MOB, &sd->state.auto_attack.target.id, CELL_CHKNOREACH) > 0)
+        if (map_foreachinlosarea(buildin_autoattack_sub, sd->bl.m, sd->bl.x - i, sd->bl.y - i, sd->bl.x + i, sd->bl.y + i, BL_MOB, &sd->state.auto_attack.target.id, CELL_CHKNOREACH) > 0)
         {
             struct block_list *target;
             target = map_id2bl(sd->state.auto_attack.target.id);
-            walkpath_data wpd;
-            if (path_search(&wpd, sd->bl.m, sd->bl.x, sd->bl.y, target->x, target->y, 1, CELL_CHKNOREACH))
+            if (path_search(NULL, sd->bl.m, sd->bl.x, sd->bl.y, target->x, target->y, 1, CELL_CHKNOREACH))
                 return true;
         }
     }
@@ -260,12 +259,18 @@ void process_attack(map_session_data *sd)
     if (unit_is_walking(&sd->bl))
         return;
 
+    // are we casting ?
+    struct unit_data *ud = NULL;
+    ud = unit_bl2ud(&sd->bl);
+    if (ud->skilltimer != INVALID_TIMER)
+        return;
+
     // do we have a target ?
     if (!sd->state.auto_attack.target.id || sd->state.auto_attack.target.id == 0)
     {
         for (int i = 5; i <= 13; i += 4)
         {
-            if (map_foreachinshootarea(buildin_autoattack_sub, sd->bl.m, sd->bl.x - i, sd->bl.y - i, sd->bl.x + i, sd->bl.y + i, BL_MOB, &sd->state.auto_attack.target.id, CELL_CHKNOREACH) > 0) //&& sd->state.auto_attack.last_target_id != sd->state.auto_attack.target.id
+            if (map_foreachinlosarea(buildin_autoattack_sub, sd->bl.m, sd->bl.x - i, sd->bl.y - i, sd->bl.x + i, sd->bl.y + i, BL_MOB, &sd->state.auto_attack.target.id, CELL_CHKNOREACH) > 0) //&& sd->state.auto_attack.last_target_id != sd->state.auto_attack.target.id
             {
                 break;
             }
@@ -305,7 +310,9 @@ void process_attack(map_session_data *sd)
                 if (skill_casttype != CAST_NODAMAGE)                                                 // is damage or ground?
                 {
                     // ShowMessage("skill damage (%d)\n", sd->state.auto_attack.target.id);
-                    if (battle_check_range(&sd->bl, target, skill_get_range2(&sd->bl, sd->status.hotkeys[random_hotkey_skill].id, pc_checkskill(sd, sd->status.hotkeys[random_hotkey_skill].id), true))) // we are in range?
+                    int skill_range = skill_get_range2(&sd->bl, sd->status.hotkeys[random_hotkey_skill].id, pc_checkskill(sd, sd->status.hotkeys[random_hotkey_skill].id), true);
+                    skill_range = (skill_range > 2) ? skill_range - 1 : skill_range;
+                    if (check_distance_bl(&sd->bl, target, skill_range)) // we are in range?
                     {
                         // ShowMessage("skill in range (%d)\n", sd->state.auto_attack.target.id);
                         if (!skill_isNotOk(sd->status.hotkeys[random_hotkey_skill].id, sd))
@@ -330,13 +337,24 @@ void process_attack(map_session_data *sd)
                             }
                         }
                     }
+                    else
+                    {
+                        if (unit_walktobl(&sd->bl, target, skill_range, 0) == 1)
+                        {
+                            // ShowMessage("walking to monster due to be away to use skill - (%d)\n", sd->state.auto_attack.target.id);
+                            recalculate_route(sd, target->x, target->y);
+                            return;
+                        }
+                    }
                 }
             }
         }
 
         // cant use skill
         // is player in attack range?
-        if (battle_check_range(&sd->bl, target, sd->battle_status.rhw.range))
+        int range = sd->battle_status.rhw.range;
+        range = (range > 2) ? range - 1 : range;
+        if (check_distance_bl(&sd->bl, target, range))
         {
             // ShowMessage("in range (%d)\n", sd->state.auto_attack.target.id);
             if (unit_attack(&sd->bl, sd->state.auto_attack.target.id, 1) == 0) // attack failed?
@@ -351,8 +369,7 @@ void process_attack(map_session_data *sd)
             if (unit_is_walking(target)) // wait monster finish walk
                 return;
 
-            walkpath_data wpd;
-            if (path_search(&wpd, sd->bl.m, sd->bl.x, sd->bl.y, target->x, target->y, 1, CELL_CHKNOREACH))
+            if (path_search(NULL, sd->bl.m, sd->bl.x, sd->bl.y, target->x, target->y, 1, CELL_CHKNOREACH))
             {
                 if (unit_walktobl(&sd->bl, target, sd->battle_status.rhw.range, 2) == 1)
                 {
@@ -368,6 +385,7 @@ void process_attack(map_session_data *sd)
     }
 }
 
+// recalculate rote
 void recalculate_route(map_session_data *sd, int target_x, int target_y)
 {
     // ShowMessage("recalculate_route\n");
@@ -375,7 +393,6 @@ void recalculate_route(map_session_data *sd, int target_x, int target_y)
     if (path_search(&sd->state.route.wpd, sd->bl.m, sd->bl.x, sd->bl.y, sd->state.route.x, sd->state.route.y, 0, CELL_CHKNOPASS))
     {
         sd->state.route.current_step = 0;
-        sd->state.route.sent_route_move = false;
 
         // calculate steps
         int i, c;
@@ -431,7 +448,6 @@ void process_random_walk(map_session_data *sd)
     else if (sd->state.route.current_step && sd->state.route.current_step > 0 && sd->state.route.route_steps[sd->state.route.current_step - 1].x == sd->bl.x && sd->state.route.route_steps[sd->state.route.current_step - 1].y == sd->bl.y)
     {
         // ShowMessage("at the current step position adding one more\n");
-        sd->state.route.sent_route_move = false;
         sd->state.route.current_step += 1;
     }
 
@@ -512,10 +528,8 @@ void reset_route(map_session_data *sd)
     sd->state.route.x = 0;
     sd->state.route.y = 0;
     sd->state.route.wpd.path_len = 0;
-    sd->state.route.wpd.path_pos = 0;
     sd->state.route.current_step = 0;
     sd->state.route.map_id = 0;
-    sd->state.route.sent_route_move = false;
     // reset sd->state.route.route_steps[x]
 }
 

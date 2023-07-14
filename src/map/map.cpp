@@ -829,6 +829,95 @@ int map_foreachinareaV(int(*func)(struct block_list*, va_list), int16 m, int16 x
 	return returnCount;
 }
 
+
+/*========================================== [Playtester]
+ * range = map m (x0,y0)-(x1,y1)
+ * Apply *func with ... arguments for the range.
+ * @param m: ID of map
+ * @param x0: West end of area
+ * @param y0: South end of area
+ * @param x1: East end of area
+ * @param y1: North end of area
+ * @param type: Type of bl to search for
+*------------------------------------------*/
+int map_foreachinareaL(int(*func)(struct block_list*, va_list), int16 m, int16 x0, int16 y0, int16 x1, int16 y1, int type, va_list ap, bool wall_check)
+{
+	int bx, by, cx, cy;
+	int returnCount = 0;	//total sum of returned values of func()
+	struct block_list *bl;
+	int blockcount = bl_list_count, i;
+	va_list ap_copy;
+
+	if (m < 0)
+		return 0;
+
+	if (x1 < x0)
+		SWAP(x0, x1);
+	if (y1 < y0)
+		SWAP(y0, y1);
+
+	struct map_data *mapdata = map_getmapdata(m);
+
+	if( mapdata == nullptr || mapdata->block == nullptr ){
+		return 0;
+	}
+
+	x0 = i16max(x0, 0);
+	y0 = i16max(y0, 0);
+	x1 = i16min(x1, mapdata->xs - 1);
+	y1 = i16min(y1, mapdata->ys - 1);
+
+	if( wall_check ) {
+		cx = x0 + (x1 - x0) / 2;
+		cy = y0 + (y1 - y0) / 2;
+	}
+
+	if( type&~BL_MOB ) {
+		for (by = y0 / BLOCK_SIZE; by <= y1 / BLOCK_SIZE; by++) {
+			for (bx = x0 / BLOCK_SIZE; bx <= x1 / BLOCK_SIZE; bx++) {
+				for(bl = mapdata->block[bx + by * mapdata->bxs]; bl != NULL; bl = bl->next) {
+					if ( bl->type&type
+						&& bl->x >= x0 && bl->x <= x1 && bl->y >= y0 && bl->y <= y1
+						&& ( !wall_check || path_search_long(NULL, m, cx, cy, bl->x, bl->y, CELL_CHKNOPASS) )
+						&& bl_list_count < BL_LIST_MAX )
+						bl_list[bl_list_count++] = bl;
+				}
+			}
+		}
+	}
+
+	if( type&BL_MOB ) {
+		for (by = y0 / BLOCK_SIZE; by <= y1 / BLOCK_SIZE; by++) {
+			for (bx = x0 / BLOCK_SIZE; bx <= x1 / BLOCK_SIZE; bx++) {
+				for(bl = mapdata->block_mob[bx + by * mapdata->bxs]; bl != NULL; bl = bl->next) {
+					if ( bl->x >= x0 && bl->x <= x1 && bl->y >= y0 && bl->y <= y1
+						&& ( !wall_check || path_search_long(NULL, m, cx, cy, bl->x, bl->y, CELL_CHKNOPASS) )
+						&& bl_list_count < BL_LIST_MAX )
+						bl_list[bl_list_count++] = bl;
+				}
+			}
+		}
+	}
+
+	if (bl_list_count >= BL_LIST_MAX)
+		ShowWarning("map_foreachinarea: block count too many!\n");
+
+	map_freeblock_lock();
+
+	for (i = blockcount; i < bl_list_count; i++) {
+		if (bl_list[i]->prev) { //func() may delete this bl_list[] slot, checking for prev ensures it wasn't queued for deletion.
+			va_copy(ap_copy, ap);
+			returnCount += func(bl_list[i], ap_copy);
+			va_end(ap_copy);
+		}
+	}
+
+	map_freeblock_unlock();
+
+	bl_list_count = blockcount;
+	return returnCount;
+}
+
 int map_foreachinallarea(int (*func)(struct block_list*,va_list), int16 m, int16 x0, int16 y0, int16 x1, int16 y1, int type, ...)
 {
 	int returnCount = 0;
@@ -840,6 +929,15 @@ int map_foreachinallarea(int (*func)(struct block_list*,va_list), int16 m, int16
 }
 
 int map_foreachinshootarea(int(*func)(struct block_list*, va_list), int16 m, int16 x0, int16 y0, int16 x1, int16 y1, int type, ...)
+{
+	int returnCount = 0;
+	va_list ap;
+ 	va_start(ap,type);
+	returnCount = map_foreachinareaV(func,m,x0,y0,x1,y1,type,ap,true);
+ 	va_end(ap);
+	return returnCount;
+}
+int map_foreachinlosarea(int(*func)(struct block_list*, va_list), int16 m, int16 x0, int16 y0, int16 x1, int16 y1, int type, ...)
 {
 	int returnCount = 0;
 	va_list ap;
