@@ -461,25 +461,27 @@ public:
 		t_itemid item_reform;
 		uint64 item_enchant_index;
         struct {
-			int16 map_id;
+            int16 map_id;
             int x;
             int y;
             struct walkpath_data wpd;
-			short current_step;
-			short steps_len;
-			bool sent_route_move;
-			s_route_steps route_steps[MAX_WALKPATH];
+            short current_step;
+            short steps_len;
+            bool sent_route_move;
+            bool attack_buff_time;
+            s_route_steps route_steps[MAX_WALKPATH];
         } route;
         struct {
-            int enabled;
-            int can_move;
-            int can_attack;
-            int use_potion_hp_min_percent;
-            int use_potion_sp_min_percent;
-            int use_fly_wing_hp_min_percent;
+			int enabled;
+			int can_move;
+			int can_attack;
+			int use_potion_hp_min_percent;
+			int use_potion_sp_min_percent;
+			int use_fly_wing_hp_min_percent;
 			int can_sit;
-            int target_id;
-            int timer;
+			int target_id;
+			int last_target_id;
+			int timer;
             block_list target;
             t_tick delay; // delay autoattack
         } auto_attack;

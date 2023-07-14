@@ -3,8 +3,34 @@
 #include <common/showmsg.hpp>
 #include <map/map.hpp>
 #include "battle.hpp"
+#include <ctime>
 
-static char atcmd_output[CHAT_SIZE_MAX];
+using namespace std;
+
+// static char atcmd_output[CHAT_SIZE_MAX]; ??
+
+s_hotkey_buff hotkey_buffs[5] = {
+    {11, SC_BLESSING},
+    {12, SC_INCREASEAGI},
+    {13, SC_ASPDPOTION0},
+    {14, SC_ASPDPOTION1},
+    {15, SC_ASPDPOTION2}};
+
+s_ac_buff ac_buffs[7] = {
+    {AB_CLEMENTIA, SC_BLESSING},
+    {AL_BLESSING, SC_BLESSING},
+    {AB_CANTO, SC_INCREASEAGI},
+    {AL_INCAGI, SC_INCREASEAGI},
+    {PR_MAGNIFICAT, SC_MAGNIFICAT},
+    {AB_PRAEFATIO, SC_KYRIE},
+    {PR_KYRIE, SC_KYRIE}};
+
+int heal_skills[5] = {
+    CD_REPARATIO,
+    CD_DILECTIO_HEAL,
+    AL_HEAL,
+    AB_CHEAL,
+    AB_HIGHNESSHEAL};
 
 // main loop
 void auto_attack_iterate(map_session_data *sd)
@@ -16,99 +42,87 @@ void auto_attack_iterate(map_session_data *sd)
         return;
     }
 
-    if (!sd->state.auto_attack.enabled)
+    if (!sd->state.auto_attack.enabled || pc_isdead(sd) || pc_is90overweight(sd) || sd->vd.dead_sit == 2)
     {
         disable_auto_attack(sd);
         return;
     }
+
     process_dead(sd);
-    if (pc_isdead(sd))
-        return;
-
-    if (((sd->state.auto_attack.use_potion_hp_min_percent > 0 && sd->state.auto_attack.use_potion_hp_min_percent < 100) || (sd->state.auto_attack.use_potion_sp_min_percent > 0 && sd->state.auto_attack.use_potion_sp_min_percent < 100)) && ((sd->battle_status.hp * 100) / sd->battle_status.max_hp < sd->state.auto_attack.use_potion_hp_min_percent || (sd->battle_status.sp * 100) / sd->battle_status.max_sp < sd->state.auto_attack.use_potion_sp_min_percent))
-        process_self_heal(sd);
-
+    process_self_heal(sd);
     process_self_buffs(sd);
-
-    if (sd->state.auto_attack.can_sit != 0 && sd->state.auto_attack.can_sit != 100)
-        process_auto_sit(sd);
-
+    process_auto_sit(sd);
     process_attack(sd);
-
+    process_teleport(sd);
     if (has_more_target(sd))
         return;
-
-    if (sd->state.auto_attack.can_move == 1)
-        process_random_walk(sd);
-
-    if (sd->state.auto_attack.use_fly_wing_hp_min_percent > 0 && sd->state.auto_attack.use_fly_wing_hp_min_percent < 100)
-        process_teleport(sd);
+    process_random_walk(sd);
 }
 
 void process_dead(map_session_data *sd)
 {
+    // ShowMessage("process_dead\n");
     // return to saveMap or disable?
 }
 
 // use pots / heal itself
 void process_self_heal(map_session_data *sd)
 {
-    short SP_percent = (sd->battle_status.sp * 100) / sd->battle_status.max_sp;
-    short HP_percent = (sd->battle_status.hp * 100) / sd->battle_status.max_hp;
-    if ((sd->class_ & MAPID_FOURTHMASK) >= MAPID_ACOLYTE)
+    // ShowMessage("process_self_heal\n");
+
+    // HP
+    short hp_percent = (sd->battle_status.hp * 100) / sd->battle_status.max_hp;
+
+    if ((sd->state.auto_attack.use_potion_hp_min_percent > 0 && sd->state.auto_attack.use_potion_hp_min_percent < 100) && hp_percent < sd->state.auto_attack.use_potion_hp_min_percent)
     {
-        if ((HP_percent >= sd->state.auto_attack.use_potion_hp_min_percent))
+        // acolyte and evolution heal skills
+        if ((sd->class_ & MAPID_FOURTHMASK) >= MAPID_ACOLYTE)
         {
-            return;
+            if ((hp_percent >= sd->state.auto_attack.use_potion_hp_min_percent))
+                return;
+
+            for (int i = 0; i < 5; i++)
+            {
+                int skill_level = pc_checkskill(sd, heal_skills[i]);
+                if (skill_level > 0)
+                {
+                    if (!skill_isNotOk(heal_skills[i], sd))
+                    {
+                        unit_skilluse_id(&sd->bl, sd->bl.id, 5268, pc_checkskill(sd, heal_skills[i]));
+                        return;
+                    }
+                }
+            }
         }
 
-        if ((HP_percent <= 10 && pc_checkskill(sd, 5268) && sd->canskill_tick && sd->class_ == MAPID_CARDINAL))
+        if (!sd->sc.cant.consume)
         {
-            unit_skilluse_id(&sd->bl, sd->bl.id, 5268, pc_checkskill(sd, 5268)); // reparatio
-        }
-        else if (pc_checkskill(sd, 5280) && sd->canskill_tick && sd->class_ == MAPID_CARDINAL)
-        {
-            unit_skilluse_id(&sd->bl, sd->bl.id, 5280, pc_checkskill(sd, 5280)); // Dilectio Heal
-        }
-        else if (pc_checkskill(sd, 28) && sd->canskill_tick && (sd->class_ == MAPID_ACOLYTE || sd->class_ == MAPID_PRIEST))
-        {
-            unit_skilluse_id(&sd->bl, sd->bl.id, 28, pc_checkskill(sd, 28)); // Heal
-        }
-        else if (pc_checkskill(sd, 2043) && sd->canskill_tick && sd->class_ == MAPID_ARCH_BISHOP)
-        {
-            unit_skilluse_id(&sd->bl, sd->bl.id, 2043, pc_checkskill(sd, 2043)); // Heal AB
-        }
-        else
-        {
-            return;
-        }
-        sd->state.route.sent_route_move = false;
-    }
-
-    int item_index;
-    if (sd->status.hotkeys[9].type == 0 && sd->status.hotkeys[9].id && !sd->sc.cant.consume && HP_percent <= sd->state.auto_attack.use_potion_hp_min_percent) // HP Potion
-    {
-        item_index = pc_search_inventory(sd, sd->status.hotkeys[9].id);
-        if (item_index >= 0 && sd->item_delay[sd->status.hotkeys[9].id].tick <= 0)
-        {
-            pc_useitem(sd, item_index);
-        }
-        else
-        {
-            return;
+            if (sd->status.hotkeys[9].type == 0 && sd->status.hotkeys[9].id && hp_percent <= sd->state.auto_attack.use_potion_hp_min_percent) // HP Potion
+            {
+                int item_index = pc_search_inventory(sd, sd->status.hotkeys[9].id);
+                if (item_index >= 0 && sd->item_delay[sd->status.hotkeys[9].id].tick <= 0)
+                {
+                    pc_useitem(sd, item_index);
+                }
+            }
         }
     }
 
-    if (sd->status.hotkeys[10].type == 0 && sd->status.hotkeys[10].id && !sd->sc.cant.consume && SP_percent <= sd->state.auto_attack.use_potion_sp_min_percent) // SP Potion
+    // SP
+    short sp_percent = (sd->battle_status.sp * 100) / sd->battle_status.max_sp;
+
+    if ((sd->state.auto_attack.use_potion_sp_min_percent > 0 && sd->state.auto_attack.use_potion_sp_min_percent < 100) && sp_percent < sd->state.auto_attack.use_potion_sp_min_percent)
     {
-        item_index = pc_search_inventory(sd, sd->status.hotkeys[10].id);
-        if (item_index >= 0 && sd->item_delay[sd->status.hotkeys[10].id].tick <= 0)
+        if (!sd->sc.cant.consume)
         {
-            pc_useitem(sd, item_index);
-        }
-        else
-        {
-            return;
+            if (sd->status.hotkeys[10].type == 0 && sd->status.hotkeys[10].id && sp_percent <= sd->state.auto_attack.use_potion_sp_min_percent) // SP Potion
+            {
+                int item_index = pc_search_inventory(sd, sd->status.hotkeys[10].id);
+                if (item_index >= 0 && sd->item_delay[sd->status.hotkeys[10].id].tick <= 0)
+                {
+                    pc_useitem(sd, item_index);
+                }
+            }
         }
     }
 }
@@ -116,130 +130,51 @@ void process_self_heal(map_session_data *sd)
 // buff itself using items registered in hotkey bar
 void process_self_buffs(map_session_data *sd)
 {
-
-    // skill check e lv cast added
-    if ((sd->class_ & MAPID_FOURTHMASK) >= MAPID_ACOLYTE)
-    {
-        if (!sd->sc.getSCE(SC_BLESSING) && pc_checkskill(sd, 2041) && sd->canskill_tick)
-        {
-            unit_skilluse_id(&sd->bl, sd->bl.id, 2041, pc_checkskill(sd, 2041)); // Blessing
-        }
-        else if (!sd->sc.getSCE(SC_BLESSING) && pc_checkskill(sd, 34) && sd->canskill_tick)
-        {
-            unit_skilluse_id(&sd->bl, sd->bl.id, 34, pc_checkskill(sd, 34)); // Blessing
-        }
-        else if (!sd->sc.getSCE(SC_INCREASEAGI) && pc_checkskill(sd, 2042) && sd->canskill_tick)
-        {
-            unit_skilluse_id(&sd->bl, sd->bl.id, 2042, pc_checkskill(sd, 2042)); // Increase Agi
-        }
-        else if (!sd->sc.getSCE(SC_INCREASEAGI) && pc_checkskill(sd, 29))
-        {
-            unit_skilluse_id(&sd->bl, sd->bl.id, 29, pc_checkskill(sd, 29)); // Increase Agi
-        }
-        else if (!sd->sc.getSCE(SC_MAGNIFICAT) && pc_checkskill(sd, 74) && sd->canskill_tick)
-        {
-            unit_skilluse_id(&sd->bl, sd->bl.id, 74, pc_checkskill(sd, 74)); // Magnificat
-        }
-        else if (!sd->sc.getSCE(EFST_KYRIE) && pc_checkskill(sd, 2045) && sd->canskill_tick)
-        {
-            unit_skilluse_id(&sd->bl, sd->bl.id, 2045, pc_checkskill(sd, 2045)); // Kyrie
-        }
-        else if (!sd->sc.getSCE(EFST_KYRIE) && pc_checkskill(sd, 73) && sd->canskill_tick)
-        {
-            unit_skilluse_id(&sd->bl, sd->bl.id, 73, pc_checkskill(sd, 73)); // Kyrie
-        }
-        else
-        {
-            return;
-        }
-        sd->state.route.sent_route_move = false;
-    }
-
-    int random_buff_skill = (rnd() % 3) + 5;
-    // random use buff registered
-    if (sd->status.hotkeys[random_buff_skill].type == 1 && skill_get_casttype(sd->status.hotkeys[random_buff_skill].id) == CAST_NODAMAGE && !sd->sc.getSCE(skill_get_sc(sd->status.hotkeys[random_buff_skill].id)) && sd->canskill_tick)
-    {
-        unit_skilluse_id(&sd->bl, sd->bl.id, sd->status.hotkeys[random_buff_skill].id, pc_checkskill(sd, sd->status.hotkeys[random_buff_skill].id));
-        sd->state.route.sent_route_move = false;
-    }
-    else
-    {
+    // ShowMessage("process_self_buffs\n");
+    // wait for stop walk
+    if (unit_is_walking(&sd->bl))
         return;
+
+    // hotkey consumable
+    int item_index;
+    for (int i = 0; i < 5; i++)
+    {
+        if (sd->status.hotkeys[hotkey_buffs[i].hotkey_pos].type == 0 && sd->status.hotkeys[hotkey_buffs[i].hotkey_pos].id) // Blessing Scroll
+        {
+            item_index = pc_search_inventory(sd, sd->status.hotkeys[hotkey_buffs[i].hotkey_pos].id);
+            if (!sd->sc.cant.consume && item_index >= 0 && sd->item_delay[sd->status.hotkeys[hotkey_buffs[i].hotkey_pos].id].tick == 0)
+            {
+                if (!sd->sc.getSCE(hotkey_buffs[i].SCE))
+                    pc_useitem(sd, item_index);
+            }
+        }
     }
 
-    int item_index;
-    if (sd->status.hotkeys[11].type == 0 && sd->status.hotkeys[11].id) // Blessing Scroll
+    int sp_percent = (sd->battle_status.sp * 100) / sd->battle_status.max_sp;
+    if (sp_percent >= 10)
     {
-        item_index = pc_search_inventory(sd, sd->status.hotkeys[11].id);
-        if (!sd->sc.cant.consume && item_index >= 0 && sd->item_delay[sd->status.hotkeys[11].id].tick == 0)
+        // random use buff registered
+        short random_buff_skill = (rnd() % 3) + 5;
+
+        if (sd->status.hotkeys[random_buff_skill].type == 1 && skill_get_casttype(sd->status.hotkeys[random_buff_skill].id) == CAST_NODAMAGE && !sd->sc.getSCE(skill_get_sc(sd->status.hotkeys[random_buff_skill].id)))
         {
-            if (!sd->sc.getSCE(SC_BLESSING))
-            {
-                pc_useitem(sd, item_index);
-            }
-            else
+            if (unit_skilluse_id(&sd->bl, sd->bl.id, sd->status.hotkeys[random_buff_skill].id, pc_checkskill(sd, sd->status.hotkeys[random_buff_skill].id)) == 1)
             {
                 return;
             }
         }
-    }
-    if (sd->status.hotkeys[12].type == 0 && sd->status.hotkeys[12].id) // Increase Agi Scroll
-    {
-        item_index = pc_search_inventory(sd, sd->status.hotkeys[12].id);
-        if (!sd->sc.cant.consume && item_index >= 0 && sd->item_delay[sd->status.hotkeys[12].id].tick == 0)
+
+        // acolyte and evolution skills
+        if ((sd->class_ & MAPID_FOURTHMASK) >= MAPID_ACOLYTE)
         {
-            if (!sd->sc.getSCE(SC_INCREASEAGI))
+            for (int i = 0; i < 7; i++)
             {
-                pc_useitem(sd, item_index);
-            }
-            else
-            {
-                return;
-            }
-        }
-    }
-    if (sd->status.hotkeys[13].type == 0 && sd->status.hotkeys[13].id) // Concentration Potion
-    {
-        item_index = pc_search_inventory(sd, sd->status.hotkeys[13].id);
-        if (!sd->sc.cant.consume && item_index >= 0 && sd->item_delay[sd->status.hotkeys[13].id].tick == 0)
-        {
-            if (!sd->sc.getSCE(SC_ASPDPOTION0))
-            {
-                pc_useitem(sd, item_index);
-            }
-            else
-            {
-                return;
-            }
-        }
-    }
-    if (sd->status.hotkeys[14].type == 0 && sd->status.hotkeys[14].id) // Awakening Potion
-    {
-        item_index = pc_search_inventory(sd, sd->status.hotkeys[14].id);
-        if (!sd->sc.cant.consume && item_index >= 0 && sd->item_delay[sd->status.hotkeys[14].id].tick == 0)
-        {
-            if (!sd->sc.getSCE(SC_ASPDPOTION1))
-            {
-                pc_useitem(sd, item_index);
-            }
-            else
-            {
-                return;
-            }
-        }
-    }
-    if (sd->status.hotkeys[15].type == 0 && sd->status.hotkeys[15].id) // Bersek Potion
-    {
-        item_index = pc_search_inventory(sd, sd->status.hotkeys[15].id);
-        if (!sd->sc.cant.consume && item_index >= 0 && sd->item_delay[sd->status.hotkeys[15].id].tick == 0)
-        {
-            if (!sd->sc.getSCE(SC_ASPDPOTION2))
-            {
-                pc_useitem(sd, item_index);
-            }
-            else
-            {
-                return;
+                if (!sd->sc.getSCE(ac_buffs[i].SCE) && pc_checkskill(sd, ac_buffs[i].id))
+                {
+                    if (unit_skilluse_id(&sd->bl, sd->bl.id, ac_buffs[i].id, pc_checkskill(sd, ac_buffs[i].id)) == 1)
+                    {
+                    }
+                }
             }
         }
     }
@@ -249,20 +184,20 @@ void process_self_buffs(map_session_data *sd)
 // TODO: add check to avoid use twice
 void process_teleport(map_session_data *sd)
 {
-    if (sd->status.hotkeys[8].type == 0 && sd->status.hotkeys[8].id)
+    // ShowMessage("process_teleport\n");
+    if (sd->state.auto_attack.use_fly_wing_hp_min_percent > 0 && sd->state.auto_attack.use_fly_wing_hp_min_percent < 100)
     {
-        if (!sd->sc.cant.consume)
+        if (sd->status.hotkeys[8].type == 0 && sd->status.hotkeys[8].id && sd->status.hotkeys[8].id == 601)
         {
-            int item_index = pc_search_inventory(sd, sd->status.hotkeys[8].id);
-            if (item_index >= 0 && ((sd->battle_status.hp * 100) / sd->battle_status.max_hp <= sd->state.auto_attack.use_fly_wing_hp_min_percent) && sd->status.hotkeys[8].id == 601)
+            if (!sd->sc.cant.consume)
             {
-                pc_useitem(sd, item_index);
-                sd->state.auto_attack.target.id = 0;
-            }
-            else
-            {
-                sd->state.auto_attack.target.id = 0;
-                return;
+                int hp_percent = (sd->battle_status.hp * 100) / sd->battle_status.max_hp;
+                if (hp_percent < sd->state.auto_attack.use_fly_wing_hp_min_percent)
+                {
+                    int item_index = pc_search_inventory(sd, sd->status.hotkeys[8].id);
+                    if (item_index >= 0)
+                        pc_useitem(sd, item_index);
+                }
             }
         }
     }
@@ -270,54 +205,49 @@ void process_teleport(map_session_data *sd)
 
 void process_auto_sit(map_session_data *sd)
 {
-
-    map_foreachinshootarea(buildin_autoattack_sub, sd->bl.m, sd->bl.x - 1, sd->bl.y - 1, sd->bl.x + 1, sd->bl.y + 1, BL_MOB, &sd->state.auto_attack.target.id, CELL_CHKCLIFF, CELL_CHKNOPASS, CELL_CHKWALL);
-    if (sd->state.auto_attack.target.id > 1)
-    {
-        sd->state.auto_attack.can_move = 1;
+    // ShowMessage("process_auto_sit\n");
+    if (sd->state.auto_attack.can_sit == 0)
         return;
-    }
 
-    sd->state.auto_attack.can_move = 0;
-    if (!pc_setstand(sd, 1))
-    {
-        //ShowStatus("cant sit now\n");
+    if (sd->state.auto_attack.target.id && sd->state.auto_attack.target.id > 1)
         return;
-    }
 
-    pc_setsit(sd) if (!skill_sit(sd, 1))
+    if (!pc_issit(sd))
     {
-        //ShowStatus("cant sit now\n");
-        return;
+        clif_parse_ActionRequest_sub(sd, 0x02, sd->bl.id, gettick());
     }
-
-    clif_sitting(&sd->bl);
 }
 
 bool has_more_target(map_session_data *sd)
 {
     // can we attack ?
     if (sd->state.auto_attack.can_attack != 1)
-    {
         return false;
-    }
 
-    // do we have a target ?
-    if (!sd->state.auto_attack.target.id || sd->state.auto_attack.target.id == 0)
+    if (sd->state.auto_attack.target.id && sd->state.auto_attack.target.id > 0)
     {
-        for (int i = 1; i <= 3; i++)
+        // ShowMessage("I still have target.id (%d)\n", sd->state.auto_attack.target.id);
+        return true;
+    }
+    for (int i = 5; i <= 13; i += 4)
+    {
+        if (map_foreachinshootarea(buildin_autoattack_sub, sd->bl.m, sd->bl.x - i, sd->bl.y - i, sd->bl.x + i, sd->bl.y + i, BL_MOB, &sd->state.auto_attack.target.id, CELL_CHKNOREACH) > 0)
         {
-            if (map_foreachinshootarea(buildin_autoattack_sub, sd->bl.m, sd->bl.x - (i * 5), sd->bl.y - (i * 5), sd->bl.x + (i * 5), sd->bl.y + (i * 5), BL_MOB, &sd->state.auto_attack.target.id, CELL_CHKCLIFF, CELL_CHKNOPASS, CELL_CHKWALL) > 0)
-            {
+            struct block_list *target;
+            target = map_id2bl(sd->state.auto_attack.target.id);
+            walkpath_data wpd;
+            if (path_search(&wpd, sd->bl.m, sd->bl.x, sd->bl.y, target->x, target->y, 1, CELL_CHKNOREACH))
                 return true;
-            }
         }
     }
+
     return false;
 }
+
 // search for target and attack it
 void process_attack(map_session_data *sd)
 {
+    // ShowMessage("process_attack\n");
 
     // can we attack ?
     if (sd->state.auto_attack.can_attack != 1)
@@ -326,26 +256,30 @@ void process_attack(map_session_data *sd)
         return;
     }
 
+    // wait walk
+    if (unit_is_walking(&sd->bl))
+        return;
+
     // do we have a target ?
     if (!sd->state.auto_attack.target.id || sd->state.auto_attack.target.id == 0)
     {
-        for (int i = 1; i <= 3; i++)
+        for (int i = 5; i <= 13; i += 4)
         {
-            if (map_foreachinshootarea(buildin_autoattack_sub, sd->bl.m, sd->bl.x - (i * 5), sd->bl.y - (i * 5), sd->bl.x + (i * 5), sd->bl.y + (i * 5), BL_MOB, &sd->state.auto_attack.target.id, CELL_CHKCLIFF, CELL_CHKNOPASS, CELL_CHKWALL) > 0)
+            if (map_foreachinshootarea(buildin_autoattack_sub, sd->bl.m, sd->bl.x - i, sd->bl.y - i, sd->bl.x + i, sd->bl.y + i, BL_MOB, &sd->state.auto_attack.target.id, CELL_CHKNOREACH) > 0) //&& sd->state.auto_attack.last_target_id != sd->state.auto_attack.target.id
             {
                 break;
             }
-            else
-            {
-                sd->state.auto_attack.target.id = 0;
-            }
+            sd->state.auto_attack.target.id = 0;
         }
-        if (sd->state.auto_attack.target.id == 0)
-            return;
     }
 
+    // no target return
+    if (sd->state.auto_attack.target.id == 0)
+        return;
+
+    // ShowMessage("target ok(%d)\n", sd->state.auto_attack.target.id);
     // we have target, what to do?
-    if (sd->state.auto_attack.target.id && sd->state.auto_attack.target.id > 0 && sd->state.auto_attack.target.id != sd->bl.id)
+    if (sd->state.auto_attack.target.id > 0 && sd->state.auto_attack.target.id != sd->bl.id)
     {
         struct block_list *target;
         target = map_id2bl(sd->state.auto_attack.target.id);
@@ -355,110 +289,148 @@ void process_attack(map_session_data *sd)
             return;
         }
 
-        //        snprintf(atcmd_output, sizeof atcmd_output, msg_txt(sd, 1187), ((double)sd->state.autoloot) / 50.); // Autolooting items with drop rates of %0.02f%% and below.
+        // can use skill ?
+        int sp_percent = (sd->battle_status.sp * 100) / sd->battle_status.max_sp;
+        if (sp_percent >= 10)
+        {
+            // ShowMessage("sp ok random skill (%d)\n", sd->state.auto_attack.target.id);
+            // use skill block
+            int random_hotkey_skill = rnd() % 5;
 
-        // in range ?
-        int range;
-        range = sd->battle_status.rhw.range;
-        // we are in range
-        if (check_distance_bl(&sd->bl, target, range))
-        {
-            if (unit_attack(&sd->bl, sd->state.auto_attack.target.id, 1) == 0)
+            // use skill from hotkey bar
+            if (sd->status.hotkeys[random_hotkey_skill].type == 1) // is skill?
             {
-                // failed to attack
-                sd->state.auto_attack.target.id = 0;
-                //ShowMessage("dropping target due to unit_attack failed\n");
-                return;
-            }
-            recalculate_route(sd);
-        }
-        // use skill block
-        int random_hotkey_skill = rnd() % 5;
-        if (sd->status.hotkeys[random_hotkey_skill].type == 1 && skill_get_casttype(sd->status.hotkeys[random_hotkey_skill].id) != CAST_NODAMAGE && (sd->battle_status.sp * 100) / sd->battle_status.max_sp >= 10 && sd->canskill_tick)
-        {
-            // if not in range it will fail, but it is ok after we will try to reach the monster
-            if (skill_get_casttype(sd->status.hotkeys[random_hotkey_skill].id) != CAST_GROUND)
-            {
-                if (!unit_skilluse_id(&sd->bl, sd->state.auto_attack.target.id, sd->status.hotkeys[random_hotkey_skill].id, pc_checkskill(sd, sd->status.hotkeys[random_hotkey_skill].id)) || !battle_check_range(&sd->bl, target, skill_get_range2(&sd->bl, sd->status.hotkeys[random_hotkey_skill].id, pc_checkskill(sd, sd->status.hotkeys[random_hotkey_skill].id), true)))
+                // ShowMessage("skill type 1 (%d)\n", sd->state.auto_attack.target.id);
+                int skill_casttype = skill_get_casttype(sd->status.hotkeys[random_hotkey_skill].id); // CAST_GROUND, CAST_DAMAGE, CAST_NODAMAGE
+                if (skill_casttype != CAST_NODAMAGE)                                                 // is damage or ground?
                 {
-                    return;
-                }
-            }
-            else
-            {
-                if (!unit_skilluse_pos(&sd->bl, target->x, target->y, sd->status.hotkeys[random_hotkey_skill].id, pc_checkskill(sd, sd->status.hotkeys[random_hotkey_skill].id)) || !battle_check_range(&sd->bl, target, skill_get_range2(&sd->bl, sd->status.hotkeys[random_hotkey_skill].id, pc_checkskill(sd, sd->status.hotkeys[random_hotkey_skill].id), true)))
-                {
-                    if (!battle_check_range(&sd->bl, target, skill_get_range2(&sd->bl, sd->status.hotkeys[random_hotkey_skill].id, pc_checkskill(sd, sd->status.hotkeys[random_hotkey_skill].id), true)) || !unit_skilluse_pos2(&sd->bl, target->x, target->y, sd->status.hotkeys[random_hotkey_skill].id, pc_checkskill(sd, sd->status.hotkeys[random_hotkey_skill].id), skill_get_cast(sd->status.hotkeys[random_hotkey_skill].id, pc_checkskill(sd, sd->status.hotkeys[random_hotkey_skill].id)), 1))
+                    // ShowMessage("skill damage (%d)\n", sd->state.auto_attack.target.id);
+                    if (battle_check_range(&sd->bl, target, skill_get_range2(&sd->bl, sd->status.hotkeys[random_hotkey_skill].id, pc_checkskill(sd, sd->status.hotkeys[random_hotkey_skill].id), true))) // we are in range?
                     {
-                        return;
+                        // ShowMessage("skill in range (%d)\n", sd->state.auto_attack.target.id);
+                        if (!skill_isNotOk(sd->status.hotkeys[random_hotkey_skill].id, sd))
+                        {
+                            int success = 0;
+
+                            switch (skill_casttype)
+                            {
+                            case CAST_DAMAGE:
+                                success = unit_skilluse_id(&sd->bl, sd->state.auto_attack.target.id, sd->status.hotkeys[random_hotkey_skill].id, pc_checkskill(sd, sd->status.hotkeys[random_hotkey_skill].id));
+                                break;
+                            case CAST_GROUND:
+                                success = unit_skilluse_pos(&sd->bl, target->x, target->y, sd->status.hotkeys[random_hotkey_skill].id, pc_checkskill(sd, sd->status.hotkeys[random_hotkey_skill].id));
+                                break;
+                            default:
+                                break;
+                            }
+                            // ShowMessage("tried to use skill? (%d)\n", sd->state.auto_attack.target.id);
+                            if (success == 1)
+                            {
+                                return;
+                            }
+                        }
                     }
                 }
             }
         }
-        // can we reach the target?
-        struct walkpath_data wpd_fake;
 
-        if (!path_search(&wpd_fake, sd->bl.m, sd->bl.x, sd->bl.y, target->x, target->y, 0, CELL_CHKNOPASS))
+        // cant use skill
+        // is player in attack range?
+        if (battle_check_range(&sd->bl, target, sd->battle_status.rhw.range))
         {
-            sd->state.auto_attack.target.id = 0;
-            //ShowMessage("dropping target due to path_search failed\n");
-            return;
-        }
-        else if (wpd_fake.path_len > 20)
-        {
-            sd->state.auto_attack.target.id = 0;
-            //ShowMessage("dropping target due to path_len > 20 (%d)\n", wpd_fake.path_len);
-            return;
-        }
-        else
-        {
-            if (unit_walktobl(&sd->bl, target, range, CELL_CHKNOPASS))
+            // ShowMessage("in range (%d)\n", sd->state.auto_attack.target.id);
+            if (unit_attack(&sd->bl, sd->state.auto_attack.target.id, 1) == 0) // attack failed?
             {
-                recalculate_route(sd);
+                // ShowMessage("fail attack, dropping target \n");
+                sd->state.auto_attack.target.id = 0;
                 return;
             }
         }
+        else
+        {                                // walk to monster position
+            if (unit_is_walking(target)) // wait monster finish walk
+                return;
+
+            walkpath_data wpd;
+            if (path_search(&wpd, sd->bl.m, sd->bl.x, sd->bl.y, target->x, target->y, 1, CELL_CHKNOREACH))
+            {
+                if (unit_walktobl(&sd->bl, target, sd->battle_status.rhw.range, 2) == 1)
+                {
+                    // ShowMessage("walking to monster (%d)\n", sd->state.auto_attack.target.id);
+                    recalculate_route(sd, target->x, target->y);
+                    return;
+                }
+            }
+            // ShowMessage("cant do anithing reseting (%d)\n", sd->state.auto_attack.target.id);
+            sd->state.auto_attack.target.id = 0;
+            return;
+        }
+    }
+}
+
+void recalculate_route(map_session_data *sd, int target_x, int target_y)
+{
+    // ShowMessage("recalculate_route\n");
+    // can reach?
+    if (path_search(&sd->state.route.wpd, sd->bl.m, sd->bl.x, sd->bl.y, sd->state.route.x, sd->state.route.y, 0, CELL_CHKNOPASS))
+    {
+        sd->state.route.current_step = 0;
+        sd->state.route.sent_route_move = false;
+
+        // calculate steps
+        int i, c;
+        int temp_x = sd->bl.x, temp_y = sd->bl.y;
+        // ShowStatus("path data: path len [%d]\n", sd->state.route.wpd.path_len);
+        for (i = c = 0; i < sd->state.route.wpd.path_len; i++)
+        {
+            temp_x += dirx[sd->state.route.wpd.path[i]];
+            temp_y += diry[sd->state.route.wpd.path[i]];
+            // ShowStatus("path data: [%d] (%d, %d) - dir: %d \n", i, temp_x, temp_y, sd->state.route.wpd.path[i]);
+            if (i % 6 == 5 || i == sd->state.route.wpd.path_len - 1)
+            {
+                sd->state.route.route_steps[c].x = temp_x;
+                sd->state.route.route_steps[c].y = temp_y;
+                c++;
+            }
+        }
+        sd->state.route.steps_len = c;
+        sd->state.route.current_step = 1;
     }
     else
     {
-        sd->state.auto_attack.target.id = 0;
-        return;
+        reset_route(sd);
+        // ShowStatus("failed in recalculate, from: %d, %d to: %d, %d\n", sd->bl.x, sd->bl.y, sd->state.route.x, sd->state.route.y);
     }
-
-    return;
 }
 
 // find a random place to walk
 void process_random_walk(map_session_data *sd)
 {
-    //ShowMessage("randomwalk - %d\n", sd->state.auto_attack.target.id);
-    //  has target?
-    if (sd->state.auto_attack.target.id > 0)
-        return;
-
-    //ShowMessage("randomwalk no target\n");
-
-    // can move?
-    if (sd->state.auto_attack.can_move != 1)
-        return;
+    // ShowMessage("process_real_random_walk\n");
 
     // map changed?
     if (sd->state.route.map_id && sd->state.route.map_id != sd->bl.m)
         reset_route(sd);
 
-    //ShowMessage("can move and no target\n");
-    //  has reached the final destination?
+    // can move? or under stats cant move or is moving using mouse?
+    if (sd->state.auto_attack.can_move != 1 || sd->sc.cant.move || unit_is_walking(&sd->bl) || pc_ischasewalk(sd))
+        return;
+
+    //  has target?
+    if (sd->state.auto_attack.target.id > 0)
+        return;
+
+    //   has reached the final destination?
     if (sd->state.route.x > 0 && sd->state.route.y > 0 && sd->bl.x == sd->state.route.x && sd->bl.y == sd->state.route.y)
     {
-        //ShowMessage("reseting\n");
-        //  closer to destination, reset it
+        //   closer to destination, reset it
         reset_route(sd);
         return;
     }
     // has reached the current step pos?
     else if (sd->state.route.current_step && sd->state.route.current_step > 0 && sd->state.route.route_steps[sd->state.route.current_step - 1].x == sd->bl.x && sd->state.route.route_steps[sd->state.route.current_step - 1].y == sd->bl.y)
     {
-        //ShowMessage("at the current step position adding one more\n");
+        // ShowMessage("at the current step position adding one more\n");
         sd->state.route.sent_route_move = false;
         sd->state.route.current_step += 1;
     }
@@ -469,10 +441,10 @@ void process_random_walk(map_session_data *sd)
         int i = 0;
         do
         {
-            struct map_data *mapdata = map_getmapdata(sd->bl.m);
             short x = sd->bl.x, y = sd->bl.y;
-            x = rnd() % (mapdata->xs - 10) + 1;
-            y = rnd() % (mapdata->ys - 10) + 1;
+
+            x = sd->bl.x + (rand() % 2 == 0 ? -1 : 1) * ((rand() % MAX_WALKPATH) + 10);
+            y = sd->bl.y + (rand() % 2 == 0 ? -1 : 1) * ((rand() % MAX_WALKPATH) + 10);
 
             // has portal in destination?
             if (npc_check_areanpc(1, sd->bl.m, x, y, 3) > 0)
@@ -489,12 +461,12 @@ void process_random_walk(map_session_data *sd)
                 // calculate steps
                 int i, c;
                 int temp_x = sd->bl.x, temp_y = sd->bl.y;
-                //ShowStatus("path data: path len [%d]\n", sd->state.route.wpd.path_len);
+                // ShowStatus("path data: path len [%d]\n", sd->state.route.wpd.path_len);
                 for (i = c = 0; i < sd->state.route.wpd.path_len; i++)
                 {
                     temp_x += dirx[sd->state.route.wpd.path[i]];
                     temp_y += diry[sd->state.route.wpd.path[i]];
-                    // ////ShowStatus("path data: [%d] (%d, %d) - dir: %d \n", i, temp_x, temp_y, sd->state.route.wpd.path[i]);
+                    // ShowStatus("path data: [%d] (%d, %d) - dir: %d \n", i, temp_x, temp_y, sd->state.route.wpd.path[i]);
                     if (i % 6 == 5 || i == sd->state.route.wpd.path_len - 1)
                     {
                         sd->state.route.route_steps[c].x = temp_x;
@@ -513,69 +485,30 @@ void process_random_walk(map_session_data *sd)
     // try route
     if (sd->state.route.x > 0 && sd->state.route.y > 0)
     {
+        if (unit_is_walking(&sd->bl) == 1)
+            return;
 
         if (!check_distance((&sd->bl)->x - (sd->state.route.route_steps[sd->state.route.current_step - 1].x), (&sd->bl)->y - (sd->state.route.route_steps[sd->state.route.current_step - 1].y), 6))
         {
-            //ShowStatus("away from route recaulculate - %d,%d\n", sd->state.route.x, sd->state.route.y);
-            recalculate_route(sd);
+            // ShowStatus("away from route recaulculate - %d,%d\n", sd->state.route.x, sd->state.route.y);
+            recalculate_route(sd, sd->state.route.x, sd->state.route.y);
         };
 
-        //ShowStatus("trying to walk to dest - %d,%d\n", sd->state.route.x, sd->state.route.y);
+        // ShowStatus("path data: current step[%d] (%d, %d)\n", sd->state.route.current_step - 1, sd->state.route.route_steps[sd->state.route.current_step - 1].x, sd->state.route.route_steps[sd->state.route.current_step - 1].y);
 
-        //ShowStatus("path data: current step[%d] (%d, %d)\n", sd->state.route.current_step - 1, sd->state.route.route_steps[sd->state.route.current_step - 1].x, sd->state.route.route_steps[sd->state.route.current_step - 1].y);
-
-        if (!sd->state.route.sent_route_move)
+        if (!unit_walktoxy(&sd->bl, sd->state.route.route_steps[sd->state.route.current_step - 1].x, sd->state.route.route_steps[sd->state.route.current_step - 1].y, 4))
         {
-            if (!unit_walktoxy(&sd->bl, sd->state.route.route_steps[sd->state.route.current_step - 1].x, sd->state.route.route_steps[sd->state.route.current_step - 1].y, 4))
-            {
-                //ShowStatus("route failed\n");
-            }
-            else
-            {
-                sd->state.route.sent_route_move = true;
-            }
+            // ShowStatus("route failed\n");
+            recalculate_route(sd, sd->state.route.x, sd->state.route.y);
         }
-        return;
     }
-}
-
-void recalculate_route(map_session_data *sd)
-{
-    // can reach?
-    if (path_search(&sd->state.route.wpd, sd->bl.m, sd->bl.x, sd->bl.y, sd->state.route.x, sd->state.route.y, 0, CELL_CHKNOPASS))
-    {
-        sd->state.route.current_step = 0;
-        sd->state.route.sent_route_move = false;
-
-        // calculate steps
-        int i, c;
-        int temp_x = sd->bl.x, temp_y = sd->bl.y;
-        //ShowStatus("path data: path len [%d]\n", sd->state.route.wpd.path_len);
-        for (i = c = 0; i < sd->state.route.wpd.path_len; i++)
-        {
-            temp_x += dirx[sd->state.route.wpd.path[i]];
-            temp_y += diry[sd->state.route.wpd.path[i]];
-            // ////ShowStatus("path data: [%d] (%d, %d) - dir: %d \n", i, temp_x, temp_y, sd->state.route.wpd.path[i]);
-            if (i % 6 == 5 || i == sd->state.route.wpd.path_len - 1)
-            {
-                sd->state.route.route_steps[c].x = temp_x;
-                sd->state.route.route_steps[c].y = temp_y;
-                c++;
-            }
-        }
-        sd->state.route.steps_len = c;
-        sd->state.route.current_step = 1;
-    }
-    else
-    {
-        // reset_route(sd);
-        //ShowStatus("failed in recalculate, from: %d, %d to: %d, %d\n", sd->bl.x, sd->bl.y, sd->state.route.x, sd->state.route.y);
-    }
+    return;
 }
 
 // reset route
 void reset_route(map_session_data *sd)
 {
+    // ShowMessage("reset_route\n");
     sd->state.route.x = 0;
     sd->state.route.y = 0;
     sd->state.route.wpd.path_len = 0;
