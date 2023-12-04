@@ -75,6 +75,66 @@ static inline int32 client_exp(t_exp exp) {
 }
 #endif
 
+// (^~_~^) Gepard Shield Start
+
+bool clif_gepard_process_packet(map_session_data* sd)
+{
+	int fd = sd->fd;
+	struct socket_data* s = session[fd];
+	int packet_id = RFIFOW(fd, 0);
+	long long diff_time = gettick() - session[fd]->gepard_info.sync_tick;
+
+	if (diff_time > 40000)
+	{
+		clif_authfail_fd(sd->fd, 15);
+		return true;
+	}
+
+	if (packet_id <= MAX_PACKET_DB)
+	{
+		return gepard_process_cs_packet(fd, s, packet_db[packet_id].len);
+	}
+
+	if (packet_id == CS_GEPARD_SYNC_2)
+	{
+		const unsigned int sync_packet_len = 128;
+		unsigned int control_value, info_type, info_code;
+
+		if (RFIFOREST(fd) < sync_packet_len)
+		{
+			return true;
+		}
+
+		gepard_enc_dec(RFIFOP(fd, 2), sync_packet_len - 2, &s->sync_crypt); 
+
+		control_value = control_value = RFIFOL(fd, 2); 
+
+		if (control_value != 0xDDCCBBAA)
+		{
+			RFIFOSKIP(fd, sync_packet_len);
+			return true;
+		}
+
+		s->gepard_info.sync_tick = gepard_get_tick();
+
+		info_type = RFIFOW(fd, 6);
+		info_code = RFIFOW(fd, 8);
+
+		if (info_type == 1 && info_code == 1)
+		{
+			const char* message = (const char*)RFIFOP(fd, 10);
+			chrif_gepard_save_report(sd, message);
+		}
+
+		RFIFOSKIP(fd, sync_packet_len);
+		return true;
+	}
+
+	return gepard_process_cs_packet(fd, s, 0);
+}
+
+// (^~_~^) Gepard Shield End
+
 /* for clif_clearunit_delayed */
 static struct eri *delay_clearunit_ers;
 
@@ -6923,7 +6983,7 @@ void clif_map_property(struct block_list *bl, enum map_property property, enum s
 		((mapdata->flag[MF_BATTLEGROUND] || mapdata_flag_gvg2(mapdata))<<2)|// SIEGE - Show emblem over characters heads when in GvG (WoE castle)
 		((mapdata->flag[MF_FORCEMINEFFECT] || mapdata_flag_gvg2(mapdata))<<3)| // USE_SIMPLE_EFFECT - Forces simpler skill effects, like /mineffect command
 		((mapdata->flag[MF_NOLOCKON] || mapdata_flag_vs(mapdata) || (sd && sd->duel_group > 0))<<4)| // DISABLE_LOCKON - Only allow attacks on other players with shift key or /ns active
-		((mapdata->flag[MF_PVP])<<5)| // COUNT_PK - Show the PvP counter
+ 		((mapdata->flag[MF_PVP])<<5)| // COUNT_PK - Show the PvP counter
 		((mapdata->flag[MF_PARTYLOCK])<<6)| // NO_PARTY_FORMATION - Prevents party creation/modification (Might be used for instance dungeons)
 		((mapdata->flag[MF_BATTLEGROUND])<<7)| // BATTLEFIELD - Unknown (Does something for battlegrounds areas)
 		((mapdata->flag[MF_NOCOSTUME])<<8)| // DISABLE_COSTUMEITEM - Disable costume sprites
@@ -10823,6 +10883,16 @@ void clif_parse_WantToConnection(int fd, map_session_data* sd)
 	sd->cryptKey = (((((clif_cryptKey[0] * clif_cryptKey[1]) + clif_cryptKey[2]) & 0xFFFFFFFF) * clif_cryptKey[1]) + clif_cryptKey[2]) & 0xFFFFFFFF;
 #endif
 	session[fd]->session_data = sd;
+
+// (^~_~^) Gepard Shield Start
+
+	if (is_gepard_active)
+	{
+		gepard_init(session[fd], fd, GEPARD_MAP);
+		session[fd]->gepard_info.sync_tick = gettick();
+	}
+
+// (^~_~^) Gepard Shield End
 
 	pc_setnewpc(sd, account_id, char_id, login_id1, client_tick, sex, fd);
 
@@ -25191,6 +25261,15 @@ static int clif_parse(int fd)
 
 	if (RFIFOREST(fd) < 2)
 		return 0;
+
+// (^~_~^) Gepard Shield Start
+
+	if (is_gepard_active == true && sd != NULL && clif_gepard_process_packet(sd) == true)
+	{
+		return 0;
+	}
+
+// (^~_~^) Gepard Shield End
 
 	cmd = RFIFOW(fd, 0);
 
